@@ -1,0 +1,6 @@
+.venv/
+.idea/
+__pycache__/
+# Lokalne ustawienia światła i dźwięku zapisywane przez main.py
+ustawienia.json
+ustawienia.tmp

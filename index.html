@@ -1,0 +1,1650 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraktalne Bryły 369</title>
+<style>
+  :root {
+    --bg: #03040c;
+    --cyan: #3ff8ff;
+    --magenta: #ff3fd8;
+    --gold: #ffc640;
+    --text: #b8d8ff;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 14px; left: 16px; pointer-events: none; font-size: 12px; line-height: 1.6;
+    text-shadow: 0 0 6px rgba(63, 248, 255, .6); max-width: min(420px, calc(100vw - 32px)); }
+  #hud h1 { margin: 0 0 6px; font-size: 15px; letter-spacing: .18em; color: var(--cyan); font-weight: 600; }
+  #hud .k { color: var(--magenta); }
+  #hud .g { color: var(--gold); text-shadow: 0 0 8px rgba(255, 198, 64, .7); }
+  #vortex { font-size: 26px; font-weight: 700; color: var(--gold); text-shadow: 0 0 14px rgba(255, 198, 64, .9); }
+  #help { position: fixed; bottom: 12px; left: 16px; font-size: 11px; opacity: .7; pointer-events: none;
+    line-height: 1.6; max-width: calc(100vw - 32px); }
+  .lil-gui { --background-color: rgba(6, 8, 22, .88); --widget-color: #141a3a; --hover-color: #1d2550;
+    --focus-color: #26306a; --number-color: #3ff8ff; --string-color: #ffc640; --title-background-color: #0c1030;
+    --font-family: "JetBrains Mono", ui-monospace, monospace; }
+  .lil-gui.root { border: 1px solid rgba(63, 248, 255, .25); box-shadow: 0 0 18px rgba(63, 248, 255, .15); }
+  #hudExp { color: var(--gold); margin-bottom: 4px; }
+  #hudExp small { color: var(--text); opacity: .8; }
+  #toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px));
+    padding: 10px 14px; background: rgba(6, 8, 22, .92); border: 1px solid var(--cyan); border-radius: 6px; font-size: 12px;
+    line-height: 1.5; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 10; }
+  #toast.show { opacity: 1; }
+  #toast.warn { border-color: #ff6b8b; color: #ffd0da; }
+  #vis { position: fixed; left: 16px; bottom: 70px; width: min(440px, calc(100vw - 32px)); height: 130px; display: none;
+    background: #000; border: 1px solid #3a4060; box-shadow: 0 0 14px rgba(31, 213, 31, .18); cursor: pointer; }
+  #vis.size-1 { width: min(640px, calc(100vw - 32px)); height: 220px; }
+  #vis.size-2 { width: min(900px, calc(100vw - 32px)); height: min(360px, 45vh); }
+  /* Nakładka: tryb „screen” – czerń znika, widać fraktale pod spodem */
+  #vis.size-3 { inset: 0; width: 100%; height: 100%; border: 0; box-shadow: none; background: transparent;
+    mix-blend-mode: screen; pointer-events: none; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; color: #ff6b8b; padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>FRAKTALNE BRYŁY · 3·6·9</h1>
+  <div id="hudExp"></div>
+  <div id="hudSolid"></div>
+  <div id="hudMath"></div>
+  <div id="hudFaces"></div>
+  <div>Rezonans: <span id="vortex">6</span> <span id="hudRes"></span></div>
+  <div id="hudSound"></div>
+  <div id="hudFps"></div>
+</div>
+<div id="help">
+  Mysz: obrót · scroll: zoom · PPM: przesuwanie &nbsp;|&nbsp;
+  <b>Spacja</b> pauza · <b>1–5</b> bryła · <b>F</b> fraktal · <b>R</b> tryb rezonansu · <b>E</b> rozsunięcie ścian · <b>G</b> restart wzrostu · <b>N</b> następny eksperyment · <b>M</b> dźwięk · <b>V</b> wizualizacja · <b>B</b> rozmiar wizualizacji · <b>H</b> panel<br>
+  Własny plik eksperymentów: przeciągnij .json na okno · Muzyka z YouTube / systemu: panel „Dźwięk” → Źródło wizualizacji
+</div>
+<canvas id="vis" title="Kliknij, aby zmienić tryb wizualizacji (V)"></canvas>
+<div id="toast"></div>
+<div id="err"></div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19.2/dist/lil-gui.esm.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import GUI from 'lil-gui';
+
+// ───────────────────────── Matematyka 3-6-9 ─────────────────────────
+// Pierwiastek cyfrowy (suma cyfr aż do jednej cyfry): dr(n) = 1 + (n-1) mod 9
+const digitalRoot = n => (n <= 0 ? 0 : 1 + ((n - 1) % 9));
+// Obwód podwajania mod 9 ("vortex math"): 1 → 2 → 4 → 8 → 7 → 5 → 1 …  (3, 6, 9 nigdy się w nim nie pojawiają)
+const CIRCUIT = [1, 2, 4, 8, 7, 5];
+// Wartość ściany i: dr(N · 2^i). Dla N podzielnego przez 3 (6, 12) ściany leżą na osi 3-6,
+// dla pozostałych (4, 8, 20) – wędrują po obwodzie 1-2-4-8-7-5.
+function faceValue(N, i) {
+  let p = 1;
+  for (let k = 0; k < i; k++) p = (p * 2) % 9;
+  return ((N % 9) * p) % 9 || 9;
+}
+function facePhase(v) {
+  if (v % 3 === 0) return { 3: 0, 6: 1 / 3, 9: 2 / 3 }[v];
+  return CIRCUIT.indexOf(v) / 6;
+}
+// Harmoniczna 3-6-9: suma trzech sinusoid o częstotliwościach 3f, 6f, 9f i amplitudach 1, 1/2, 1/3
+function harmonic369(t, f) {
+  const w = 2 * Math.PI * f;
+  return (Math.sin(3 * w * t) + Math.sin(6 * w * t) / 2 + Math.sin(9 * w * t) / 3) / (1 + 1 / 2 + 1 / 3);
+}
+
+// ───────────────────────── Dźwięk: częstotliwości „lecznicze” ─────────────────────────
+// Tony i dudnienia binauralne popularne w muzyce relaksacyjnej. Opisy to tradycyjnie przypisywane działanie,
+// w większości niepotwierdzone naukowo. Lewe ucho słyszy nośną f, prawe f + Δ – różnica Δ jest odbierana jako
+// dudnienie binauralne (wymaga słuchawek). Δ = 0 → czysty ton. Wszystkie tony Solfeggio mają dr = 3, 6 lub 9.
+const SOUNDS = [
+  { key: 'cisza',    name: 'Cisza',                     hz: 0,     beat: 0,    opis: '' },
+  { key: '174',      name: 'Solfeggio 174 Hz',          hz: 174,   beat: 0,    opis: 'ugruntowanie, łagodzenie bólu' },
+  { key: '285',      name: 'Solfeggio 285 Hz',          hz: 285,   beat: 0,    opis: 'regeneracja tkanek' },
+  { key: '396',      name: 'Solfeggio 396 Hz (UT)',     hz: 396,   beat: 0,    opis: 'uwolnienie od lęku i poczucia winy' },
+  { key: '417',      name: 'Solfeggio 417 Hz (RE)',     hz: 417,   beat: 0,    opis: 'oczyszczenie, ułatwienie zmiany' },
+  { key: '528',      name: 'Solfeggio 528 Hz (MI)',     hz: 528,   beat: 0,    opis: '„częstotliwość miłości”, transformacja' },
+  { key: '639',      name: 'Solfeggio 639 Hz (FA)',     hz: 639,   beat: 0,    opis: 'harmonia w relacjach' },
+  { key: '741',      name: 'Solfeggio 741 Hz (SOL)',    hz: 741,   beat: 0,    opis: 'ekspresja, oczyszczanie' },
+  { key: '852',      name: 'Solfeggio 852 Hz (LA)',     hz: 852,   beat: 0,    opis: 'intuicja, przebudzenie' },
+  { key: '963',      name: 'Solfeggio 963 Hz',          hz: 963,   beat: 0,    opis: '„częstotliwość jedności”, szyszynka' },
+  { key: '432',      name: 'Strój 432 Hz',              hz: 432,   beat: 0,    opis: '„naturalny” strój A (Verdi), dr = 9' },
+  { key: 'om',       name: 'OM 136,1 Hz',               hz: 136.1, beat: 0,    opis: 'ton roku ziemskiego (Cosmic Octave), misy tybetańskie' },
+  { key: '111',      name: '111 Hz',                    hz: 111,   beat: 0,    opis: 'rezonans komór megalitycznych (Hal Saflieni)' },
+  { key: 'schumann', name: 'Rezonans Schumanna 7,83 Hz', hz: 216,  beat: 7.83, opis: 'puls Ziemi jako dudnienie na nośnej 216 Hz (= 432/2)' },
+  { key: 'delta',    name: 'Delta 3 Hz – sen',          hz: 174,   beat: 3,    opis: 'fale delta: głęboki sen, regeneracja' },
+  { key: 'theta',    name: 'Theta 6 Hz – medytacja',    hz: 396,   beat: 6,    opis: 'fale theta: medytacja, wyobraźnia' },
+  { key: 'alfa',     name: 'Alfa 9 Hz – relaks',        hz: 432,   beat: 9,    opis: 'fale alfa: odprężenie, spokojna uwaga' },
+  { key: 'beta',     name: 'Beta 18 Hz – skupienie',    hz: 528,   beat: 18,   opis: 'fale beta: koncentracja' },
+  { key: 'gamma',    name: 'Gamma 40 Hz – poznanie',    hz: 432,   beat: 40,   opis: 'stymulacja 40 Hz – badana m.in. w chorobie Alzheimera (MIT)' },
+];
+const SOUND_NAMES = SOUNDS.map(s => s.name);
+const INPUTS = ['Generator', 'Wejście audio / monitor systemu', 'Karta lub ekran (np. YouTube)'];
+const VIS_MODES = ['Widmo', 'Widmo lustrzane L/P', 'Widmo – linia', 'Spektrogram', 'Oscyloskop', 'Oscyloskop – kropki',
+  'Lissajous L/R', 'VU-metry L/P', 'Okrąg (AVS)', 'Tunel (MilkDrop)', 'Wyłączona'];
+const VIS_SIZES = ['Mały', 'Średni', 'Duży', 'Nakładka na cały ekran'];
+const soundByName = n => SOUNDS.find(s => s.name === n) ?? SOUNDS[0];
+
+// AudioContext wolno utworzyć dopiero po geście użytkownika (klik / klawisz), stąd leniwy start.
+const audio = { ctx: null, gain: null, oscL: null, oscR: null, anL: null, anR: null, warned: false,
+  genTap: null, extTap: null, ext: null, stream: null, label: '' };
+function startAudio(sampleRate) {
+  if (!audio.ctx) {
+    const ctx = new AudioContext(sampleRate ? { sampleRate } : undefined);
+    const merger = ctx.createChannelMerger(2);
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    merger.connect(gain).connect(ctx.destination);
+    const osc = ch => { const o = ctx.createOscillator(); o.connect(merger, 0, ch); o.start(); return o; };
+    // Szyna analizy: generator albo zewnętrzne źródło (bramki genTap / extTap) → analizatory L i P.
+    // Źródło zewnętrzne trafia tylko do analizy, nie do głośników (gra już w systemie).
+    const bus = ctx.createGain();
+    Object.assign(bus, { channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers' });  // mono → oba kanały
+    const genTap = ctx.createGain(), extTap = ctx.createGain();
+    gain.connect(genTap).connect(bus);
+    extTap.connect(bus);
+    const split = ctx.createChannelSplitter(2);
+    bus.connect(split);
+    const an = ch => {
+      const a = ctx.createAnalyser();
+      Object.assign(a, { fftSize: 8192, smoothingTimeConstant: 0.5, minDecibels: -90, maxDecibels: -15 });
+      split.connect(a, ch);
+      return a;
+    };
+    Object.assign(audio, { ctx, gain, genTap, extTap, oscL: osc(0), oscR: osc(1), anL: an(0), anR: an(1) });
+  }
+  return audio.ctx.resume();
+}
+// Co klatkę: płynnie dociąga częstotliwości i głośność (setTargetAtTime – bez trzasków).
+// Przy sprzężeniu głośność oddycha razem z impulsem rezonansu 3-6-9.
+function updateAudio(pulse, amt) {
+  if (!audio.ctx) return;
+  const t = audio.ctx.currentTime, hz = params.carrierHz;
+  if (hz > 0) {
+    audio.oscL.frequency.setTargetAtTime(hz, t, 0.08);
+    audio.oscR.frequency.setTargetAtTime(hz + params.beatHz, t, 0.08);
+  }
+  let g = params.soundOn && hz > 0 ? params.volume * 0.5 : 0;
+  if (params.soundCouple) g *= 0.75 + 0.25 * pulse * amt;
+  audio.gain.gain.setTargetAtTime(Math.max(0, g), t, 0.06);
+}
+
+// ───────────────────────── Bryły platońskie ─────────────────────────
+const SOLIDS = [
+  { name: 'Czworościan',     N: 4,  make: () => new THREE.TetrahedronGeometry(1, 0) },
+  { name: 'Sześcian',        N: 6,  make: () => { const s = 2 / Math.sqrt(3); return new THREE.BoxGeometry(s, s, s); } },
+  { name: 'Ośmiościan',      N: 8,  make: () => new THREE.OctahedronGeometry(1, 0) },
+  { name: 'Dwunastościan',   N: 12, make: () => new THREE.DodecahedronGeometry(1, 0) },
+  { name: 'Dwudziestościan', N: 20, make: () => new THREE.IcosahedronGeometry(1, 0) },
+];
+const FRACTALS = { 'Julia (c obraca się o 2π·v/9)': 0, 'Multibrot z^dr(N)': 1, 'Sierpiński n-flake': 2, 'Kalejdoskop Kaliego (N-krotny)': 3 };
+const FRACTAL_NAMES = Object.keys(FRACTALS);
+
+// Klucz do porównań z tolerancją (+ 0 zamienia -0 na 0, żeby ta sama ściana nie rozpadła się na dwie grupy)
+const vkey = (v, d = 4) => [v.x, v.y, v.z].map(c => Math.round(c * 10 ** d) + 0).join(',');
+
+// Grupuje trójkąty geometrii Three.js w wielokątne ściany i dla każdej ściany wylicza
+// lokalny układ współrzędnych 2D (środek = 0, promień opisany = 1, wierzchołek 0 na osi +x).
+function analyzeSolid(def) {
+  let g = def.make();
+  if (g.index) g = g.toNonIndexed();
+  const pos = g.attributes.position;
+  const groups = new Map();
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2);
+    const n = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).normalize();
+    if (n.dot(new THREE.Vector3().add(a).add(b).add(c)) < 0) n.negate();
+    const key = vkey(n, 3);
+    if (!groups.has(key)) groups.set(key, { n, tris: [] });
+    groups.get(key).tris.push([a.clone(), b.clone(), c.clone()]);
+  }
+  g.dispose();
+
+  const faces = [];
+  for (const { n, tris } of groups.values()) {
+    const uniq = new Map();
+    tris.flat().forEach(p => uniq.set(vkey(p), p));
+    const verts = [...uniq.values()];
+    const center = verts.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(verts.length);
+    const u = verts[0].clone().sub(center);
+    const R = u.length();
+    u.normalize();
+    const v = new THREE.Vector3().crossVectors(n, u);
+    const to2D = p => { const d = p.clone().sub(center); return [d.dot(u) / R, d.dot(v) / R]; };
+    verts.sort((p, q) => { const [px, py] = to2D(p), [qx, qy] = to2D(q); return Math.atan2(py, px) - Math.atan2(qy, qx); });
+    faces.push({ n, center, tris, verts, to2D });
+  }
+
+  const N = faces.length;
+  const positions = [], normals = [], fuv = [], fid = [], fval = [], fphase = [];
+  const edges = new Map();
+  faces.forEach((f, i) => {
+    f.value = faceValue(N, i);
+    f.phase = facePhase(f.value);
+    for (const tri of f.tris) for (const p of tri) {
+      positions.push(p.x, p.y, p.z);
+      normals.push(f.n.x, f.n.y, f.n.z);
+      fuv.push(...f.to2D(p));
+      fid.push(i); fval.push(f.value); fphase.push(f.phase);
+    }
+    f.verts.forEach((p, j) => {
+      const q = f.verts[(j + 1) % f.verts.length];
+      const k = [vkey(p), vkey(q)].sort().join('|');
+      if (!edges.has(k)) edges.set(k, { p, q, faces: [] });
+      edges.get(k).faces.push(i);
+    });
+  });
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geom.setAttribute('fuv', new THREE.Float32BufferAttribute(fuv, 2));
+  geom.setAttribute('fid', new THREE.Float32BufferAttribute(fid, 1));
+  geom.setAttribute('fval', new THREE.Float32BufferAttribute(fval, 1));
+  geom.setAttribute('fphase', new THREE.Float32BufferAttribute(fphase, 1));
+
+  const vertices = new Map();
+  faces.forEach(f => f.verts.forEach(p => vertices.set(vkey(p), p)));
+
+  return {
+    N, sides: faces[0].verts.length, geom, faces,
+    edges: [...edges.values()],
+    vertices: [...vertices.values()],
+    // Bryła dualna: wierzchołki = środki ścian, krawędzie łączą ściany sąsiadujące przez krawędź
+    dualEdges: [...edges.values()].map(e => [faces[e.faces[0]].center, faces[e.faces[1]].center]),
+  };
+}
+
+// ───────────────────────── Shadery ─────────────────────────
+const vertexShader = /* glsl */`
+  attribute vec2 fuv;
+  attribute float fid;
+  attribute float fval;
+  attribute float fphase;
+  uniform float uExplode, uPulse, uAmt;
+  varying vec2 vUv;
+  varying float vId, vVal, vPhase;
+  varying vec3 vN, vW;
+  void main() {
+    float tesla = step(mod(fval + 0.5, 3.0), 1.0);
+    vec3 p = position + normal * (uExplode + tesla * uPulse * uAmt * 0.07);
+    vec4 wp = modelMatrix * vec4(p, 1.0);
+    vUv = fuv; vId = fid; vVal = fval; vPhase = fphase;
+    vN = normalize(mat3(modelMatrix) * normal);
+    vW = cameraPosition - wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const fragmentShader = /* glsl */`
+  precision highp float;
+  #define PI  3.14159265359
+  #define TAU 6.28318530718
+  #define MAXI 200
+
+  uniform float uTime, uN, uSides, uMode, uIter, uKaliIt, uDepth, uPower;
+  uniform float uPal, uPulse, uAmt, uZoom, uCycle, uBright;
+  uniform float uAnchor, uGrow;   // uAnchor: 1 = fraktale startują z narożników ścian, 0 = ze środka
+  uniform sampler2D uSpec;        // widmo audio: x = pasmo (40 Hz → 2 kHz, skala log), r = poziom
+  uniform float uLevel, uOnset, uReact;
+  uniform vec3 uC0, uC1, uC2;
+  varying vec2 vUv;
+  varying float vId, vVal, vPhase;
+  varying vec3 vN, vW;
+
+  // Paleta cyjan → magenta → złoto (trzy kolory = 3 fazy cyklu 3-6-9)
+  vec3 pal(float t) {
+    t = fract(t + uPal) * 3.0;
+    float f = smoothstep(0.0, 1.0, fract(t));
+    if (t < 1.0) return mix(uC0, uC1, f);
+    if (t < 2.0) return mix(uC1, uC2, f);
+    return mix(uC2, uC0, f);
+  }
+  mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+
+  // Odległość do krawędzi foremnego k-kąta (promień opisany 1, wierzchołek na osi +x); > 0 wewnątrz
+  float polyEdge(vec2 p, float k) {
+    float sec = TAU / k;
+    float a = mod(atan(p.y, p.x), sec);
+    return cos(PI / k) - length(p) * cos(a - PI / k);
+  }
+
+  // 0: Julia – parametr c obraca się o kąt 2π·v/9, liczba iteracji = mnożnik(3/6/9) × N
+  vec3 fJulia(vec2 p) {
+    float ang = TAU * vVal / 9.0 + uTime * 0.21;
+    vec2 c = 0.7885 * vec2(cos(ang), sin(ang));
+    vec2 z = p * 1.5 / uZoom;
+    float n = 0.0, m2 = 0.0;
+    for (int i = 0; i < MAXI; i++) {
+      if (float(i) >= uIter) break;
+      z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+      m2 = dot(z, z);
+      if (m2 > 256.0) break;
+      n += 1.0;
+    }
+    if (n >= uIter - 0.5) return pal(vPhase + 0.5 + length(z) * 0.3) * 0.07;
+    float sn = n - log2(log2(m2)) + 4.0;
+    float f = clamp(sn / uIter, 0.0, 1.0);
+    return pal(sn * 0.035 + vPhase) * (0.08 + 1.6 * sqrt(f));
+  }
+
+  // 1: Multibrot z → z^d + c, gdzie d = pierwiastek cyfrowy N (4, 6, 8, 3, 2)
+  vec3 fMulti(vec2 p) {
+    float d = uPower;
+    // W trybie narożnikowym zbiór zaczyna się w wierzchołku ściany (dla z² – "antena" Mandelbrota wychodzi z narożnika)
+    vec2 c = uAnchor > 0.5
+      ? vec2(p.x * 2.4 / uZoom - (d < 2.5 ? 2.0 : 1.25), p.y * 2.4 / uZoom)
+      : p * 1.45 / uZoom + (d < 2.5 ? vec2(-0.5, 0.0) : vec2(0.0));
+    vec2 z = c;
+    float n = 1.0, r = length(z);
+    float trap = 1e3;
+    for (int i = 1; i < MAXI; i++) {
+      if (float(i) >= uIter) break;
+      float th = atan(z.y, z.x);
+      z = pow(r, d) * vec2(cos(d * th), sin(d * th)) + c;
+      r = length(z);
+      trap = min(trap, abs(r - 0.5));
+      if (r > 16.0) break;
+      n += 1.0;
+    }
+    if (n >= uIter - 0.5) return pal(vPhase + trap * 2.0) * (0.05 + 0.25 * exp(-trap * 12.0));
+    float sn = n - log(log(r) / log(16.0)) / log(d);
+    float f = clamp(sn / uIter, 0.0, 1.0);
+    return pal(sn * 0.05 + vPhase) * (0.06 + 1.7 * pow(f, 0.6));
+  }
+
+  // 2: Sierpiński n-flake na ścianie (trójkąt / kwadrat Vicseka / pentaflake),
+  //    głębokość = ceil(log2 N)+1 modyfikowana przez rezonans; nieskończony zoom do wierzchołka v0
+  //    (w trybie narożnikowym p jest obrócone tak, że v0 to najbliższy narożnik – zoom wychodzi z każdego)
+  vec3 fFlake(vec2 p) {
+    float k = uSides;
+    float r = k < 3.5 ? 0.5 : (k < 4.5 ? 1.0 / 3.0 : 0.381966);
+    float z = fract(uTime * 0.06);
+    vec2 v0 = vec2(1.0, 0.0);
+    p = v0 + (p - v0) * pow(r, z);
+    float sc = 1.0, lvl = 0.0, glow = 0.0;
+    bool inside = true;
+    for (int i = 0; i < 9; i++) {
+      if (float(i) >= uDepth) break;
+      float e = polyEdge(p, k) * sc;
+      glow += 0.005 / (abs(e) + 0.005);
+      if (k > 3.5 && k < 4.5 && polyEdge(p / r, k) > 0.0) {
+        p /= r;
+      } else {
+        float sec = TAU / k;
+        float j = floor(atan(p.y, p.x) / sec + 0.5);
+        vec2 v = vec2(cos(j * sec), sin(j * sec));
+        p = (p - (1.0 - r) * v) / r;
+      }
+      sc *= r;
+      if (polyEdge(p, k) < 0.0) { inside = false; break; }
+      lvl += 1.0;
+    }
+    vec3 col;
+    if (inside) {
+      float rings = 0.5 + 0.5 * cos(polyEdge(p, k) * 18.0 - uTime * 2.5);
+      col = pal(lvl / uDepth * 0.66 + vPhase + uTime * 0.03) * (0.35 + 0.9 * rings);
+    } else {
+      col = pal(lvl / uDepth + vPhase) * 0.04;
+    }
+    col += pal(vPhase + lvl * 0.17 + 0.33) * glow * 0.10;
+    return col;
+  }
+
+  // 3: Kalejdoskop Kaliego – symetria N-krotna, liczba iteracji odwzorowania p → |p|/p² − c ~ N
+  vec3 fKali(vec2 p) {
+    float sec = TAU / uN;
+    float a = mod(atan(p.y, p.x), sec);
+    a = abs(a - 0.5 * sec);
+    p = length(p) * vec2(cos(a), sin(a)) * 0.9 / uZoom;
+    vec2 c = vec2(0.55 + 0.12 * sin(uTime * 0.13 + vPhase * TAU), 0.45 + 0.10 * cos(uTime * 0.11));
+    float t1 = 1e3, t2 = 1e3, acc = 0.0;
+    for (int i = 0; i < 32; i++) {
+      if (float(i) >= uKaliIt) break;
+      p = abs(p) / max(dot(p, p), 1e-3) - c;
+      t1 = min(t1, abs(p.x * p.y));
+      t2 = min(t2, abs(length(p) - 0.5));
+      acc += exp(-8.0 * abs(p.y));
+    }
+    vec3 col = pal(t2 * 1.5 + vPhase + uTime * 0.02) * exp(-t2 * 6.0) * 1.3;
+    col += pal(t1 * 4.0 + 0.33 + vPhase) * exp(-t1 * 30.0) * 0.9;
+    col += pal(vPhase + 0.66) * acc / uKaliIt * 0.4;
+    return col;
+  }
+
+  void main() {
+    vec2 p = vUv;
+    float k = uSides;
+    float edge = polyEdge(p, k);
+    float dir = mod(vId, 2.0) < 0.5 ? 1.0 : -1.0;
+    float tesla = step(mod(vVal + 0.5, 3.0), 1.0);   // ściana o wartości 3, 6 lub 9
+
+    // Najbliższy narożnik ściany vj i lokalny układ narożnika:
+    // x – wzdłuż dwusiecznej kąta w stronę środka ściany, y – odległość od dwusiecznej (|y| = lustro,
+    // dzięki któremu wzory z sąsiednich narożników stykają się bez szwu na symetralnej krawędzi)
+    float sec = TAU / k;
+    float j = floor(atan(p.y, p.x) / sec + 0.5);
+    vec2 vj = vec2(cos(j * sec), sin(j * sec));
+    vec2 dv = p - vj;
+    float cornerDist = length(dv);
+    vec2 cp = vec2(dot(dv, -vj), abs(dot(dv, vec2(vj.y, -vj.x))));
+    bool corner = uAnchor > 0.5;
+
+    vec2 q = corner ? cp * (1.0 + 0.12 * sin(uTime * 0.4 + vPhase * TAU)) : rot(uTime * 0.12 * dir) * p;
+    q *= 1.0 - 0.15 * uReact * uLevel;   // głośność „oddycha” zoomem fraktala
+    vec2 fp = p;
+    if (corner) { fp = rot(j * sec) * p; fp.y = abs(fp.y); }
+
+    int m = int(uMode + 0.5);
+    vec3 col;
+    if (m == 0) col = fJulia(q);
+    else if (m == 1) col = fMulti(q);
+    else if (m == 2) col = fFlake(fp);
+    else col = fKali(q);
+
+    // Wzrost: fraktal rozlewa się z narożników (lub ze środka) jako neonowy front fali
+    float gd = corner ? cornerDist : length(p);
+    float front = uGrow * 1.05;
+    col *= smoothstep(front, front - 0.08, gd);
+    col += pal(vPhase + gd * 0.5) * exp(-abs(gd - front) * 45.0) * 1.6 * (1.0 - smoothstep(0.95, 1.0, uGrow));
+    if (corner) col += pal(vPhase + 0.66) * exp(-cornerDist * 28.0) * (0.6 + 0.5 * uPulse * uAmt);
+
+    // Ściany obwodu 1-2-4-8-7-5: fala energii płynąca w kolejności podwajania
+    float flow = 0.5 + 0.5 * cos(TAU * (uCycle - vPhase));
+    // Ściany 3-6-9: pulsują razem z harmoniczną rezonansu
+    float energy = mix(0.75 + 0.35 * flow * uAmt, 1.0 + 0.6 * uPulse * uAmt, tesla);
+    col *= energy;
+
+    float rim = exp(-max(edge, 0.0) * 40.0);
+    vec3 rimCol = tesla > 0.5 ? uC2 : pal(vPhase);
+    col += rimCol * rim * (0.5 + 0.9 * uPulse * uAmt * tesla + 0.5 * flow * (1.0 - tesla));
+
+    // Reakcja na widmo: odległość od źródła fraktala ↔ pasmo częstotliwości (niskie tony przy źródle,
+    // wysokie dalej) – każdy ton rozświetla własny pierścień; głośność jaśnieje, uderzenia błyskają krawędziami
+    float sp = texture2D(uSpec, vec2(clamp(gd, 0.0, 1.0) * 0.96 + 0.02, 0.5)).r;
+    sp *= sp;
+    col *= 1.0 + uReact * (0.45 * uLevel + 1.4 * sp);
+    col += pal(vPhase + sp * 0.5 + gd * 0.3) * sp * uReact * 0.35;
+    col += rimCol * rim * uOnset * uReact * 1.5;
+    col *= smoothstep(0.0, 0.012, edge);
+
+    float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vW))), 3.0);
+    col += uC0 * fr * 0.25;
+    if (!gl_FrontFacing) col *= 0.3;
+    gl_FragColor = vec4(col * uBright, 1.0);
+  }
+`;
+
+// ───────────────────────── Scena ─────────────────────────
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  const err = document.getElementById('err');
+  err.style.display = 'grid';
+  err.textContent = 'Ta przeglądarka nie obsługuje WebGL2 – aplikacja nie może się uruchomić.';
+  throw e;
+}
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x03040c);
+scene.fog = new THREE.FogExp2(0x03040c, 0.012);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.05, 200);
+camera.position.set(0, 0.6, 5.2);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 1.6;
+controls.maxDistance = 20;
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.55, 0.22);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+composer.setPixelRatio(renderer.getPixelRatio());
+
+const params = {
+  solid: 'Sześcian',
+  fractal: FRACTAL_NAMES[0],
+  anchor: 'Narożniki',
+  growSeconds: 3,
+  growLoop: false,
+  experiment: '',
+  playlist: false,
+  autoCycle: false,
+  cycleSeconds: 9,
+  paused: false,
+  speed: 1,
+  rotSpeed: 0.35,
+  resMode: 'Płynny',
+  baseHz: 1 / 9,
+  resAmt: 0.8,
+  iterMult: 9,
+  zoom: 1,
+  explode: 0,
+  showDual: true,
+  showRings: true,
+  edgeGlow: 2.6,
+  brightness: 1,
+  bloomStrength: 0.85,
+  bloomRadius: 0.55,
+  bloomThreshold: 0.22,
+  exposure: 1,
+  pixelRatio: Math.min(devicePixelRatio, 1.5),
+  c0: '#21f4ff',
+  c1: '#ff2bd6',
+  c2: '#ffc236',
+  soundOn: false,
+  sound: SOUNDS[5].name,
+  carrierHz: SOUNDS[5].hz,
+  beatHz: SOUNDS[5].beat,
+  volume: 0.3,
+  soundCouple: true,
+  visMode: VIS_MODES[0],
+  visSize: VIS_SIZES[0],
+  audioReact: true,
+  reactAmt: 1,
+  keepUser: false,
+  inputSource: INPUTS[0],
+  audioInput: 'system',
+};
+const DEFAULTS = { ...params };
+
+const uniforms = {
+  uTime: { value: 0 }, uN: { value: 6 }, uSides: { value: 4 }, uMode: { value: 0 },
+  uIter: { value: 54 }, uKaliIt: { value: 6 }, uDepth: { value: 4 }, uPower: { value: 6 },
+  uPal: { value: 0 }, uPulse: { value: 0 }, uAmt: { value: 0.8 }, uZoom: { value: 1 }, uCycle: { value: 0 },
+  uBright: { value: 1 }, uExplode: { value: 0 }, uAnchor: { value: 1 }, uGrow: { value: 0 },
+  uSpec: { value: null }, uLevel: { value: 0 }, uOnset: { value: 0 }, uReact: { value: 0 },
+  uC0: { value: new THREE.Color() }, uC1: { value: new THREE.Color() }, uC2: { value: new THREE.Color() },
+};
+function syncColors() {
+  uniforms.uC0.value.set(params.c0);
+  uniforms.uC1.value.set(params.c1);
+  uniforms.uC2.value.set(params.c2);
+  edgeMat.color.set(params.c0).multiplyScalar(params.edgeGlow);
+  vertMat.color.set(params.c1).multiplyScalar(params.edgeGlow * 1.2);
+  dualMat.color.set(params.c2).multiplyScalar(1.6);
+  rings.children.forEach((r, i) => r.material.color.set([params.c0, params.c1, params.c2][i]).multiplyScalar(1.4));
+}
+
+const faceMat = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader, side: THREE.DoubleSide });
+const edgeMat = new THREE.MeshBasicMaterial();
+const vertMat = new THREE.MeshBasicMaterial();
+const dualMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.75 });
+const cylGeom = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+const sphGeom = new THREE.SphereGeometry(1, 16, 12);
+
+const world = new THREE.Group();
+scene.add(world);
+const solidGroup = new THREE.Group();
+solidGroup.scale.setScalar(1.35);
+world.add(solidGroup);
+
+// Pierścienie "świętej geometrii" obracające się w proporcji 3:6:9
+const rings = new THREE.Group();
+[2.15, 2.35, 2.55].forEach((rad, i) => {
+  const pts = [];
+  for (let k = 0; k < 216; k++) { const a = k / 216 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * rad, Math.sin(a) * rad, 0)); }
+  const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ transparent: true, opacity: 0.55 }));
+  line.rotation.set(i * Math.PI / 3, i * Math.PI / 6, 0);
+  line.userData.speed = (i + 1) * 3;
+  rings.add(line);
+});
+scene.add(rings);
+
+// Tło gwiazd
+{
+  const n = 2500, arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(25 + Math.random() * 50);
+    arr.set([v.x, v.y, v.z], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x6f8cff, size: 0.12, sizeAttenuation: true, transparent: true, opacity: 0.7 })));
+}
+
+let current = null;
+const up = new THREE.Vector3(0, 1, 0);
+function buildSolid(def) {
+  if (current) {
+    solidGroup.children.forEach(c => c.isInstancedMesh && c.dispose());
+    solidGroup.clear();
+    current.geom.dispose();
+    current.dualGeom.dispose();
+  }
+  const data = analyzeSolid(def);
+  data.def = def;
+
+  solidGroup.add(new THREE.Mesh(data.geom, faceMat));
+
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), mid = new THREE.Vector3(), dir = new THREE.Vector3();
+  const edgesMesh = new THREE.InstancedMesh(cylGeom, edgeMat, data.edges.length);
+  data.edges.forEach((e, i) => {
+    dir.subVectors(e.q, e.p);
+    mid.addVectors(e.p, e.q).multiplyScalar(0.5);
+    q.setFromUnitVectors(up, dir.clone().normalize());
+    s.set(0.011, dir.length(), 0.011);
+    edgesMesh.setMatrixAt(i, m.compose(mid, q, s));
+  });
+  solidGroup.add(edgesMesh);
+
+  const vertsMesh = new THREE.InstancedMesh(sphGeom, vertMat, data.vertices.length);
+  data.vertices.forEach((p, i) => vertsMesh.setMatrixAt(i, m.compose(p, q.identity(), s.setScalar(0.028))));
+  solidGroup.add(vertsMesh);
+
+  data.dualGeom = new THREE.BufferGeometry().setFromPoints(data.dualEdges.flat());
+  data.dual = new THREE.LineSegments(data.dualGeom, dualMat);
+  data.dual.visible = params.showDual;
+  solidGroup.add(data.dual);
+
+  uniforms.uN.value = data.N;
+  uniforms.uSides.value = data.sides;
+  uniforms.uPower.value = digitalRoot(data.N);
+  current = data;
+  restartGrowth();
+  updateStaticHud();
+}
+
+// Płynne przejście między bryłami: zwinięcie → podmiana → rozwinięcie
+const transition = { phase: 'idle', t: 0, target: null };
+function switchSolid(name) {
+  const def = SOLIDS.find(d => d.name === name);
+  if (!def || (current && current.def === def && transition.phase === 'idle')) return;
+  transition.phase = 'out'; transition.t = 0; transition.target = def;
+}
+const ease = t => t * t * (3 - 2 * t);
+
+// ───────────────────────── GUI ─────────────────────────
+const gui = new GUI({ title: 'Panel eksperymentu' });
+const eG = gui.addFolder('Eksperymenty (eksperymenty.json)');
+let expCtrl = eG.add(params, 'experiment', ['—']).name('Eksperyment');
+eG.add({ prev: () => stepExperiment(-1) }, 'prev').name('◀ Poprzedni');
+eG.add({ next: () => stepExperiment(1) }, 'next').name('Następny ▶ (N)');
+eG.add(params, 'playlist').name('Odtwarzaj po kolei').onChange(() => { expT = 0; });
+eG.add({ load: () => $('fileInput').click() }, 'load').name('Wczytaj plik JSON…');
+eG.add({ reload: loadExperimentsFile }, 'reload').name('Przeładuj eksperymenty.json');
+eG.add({ save: downloadCurrent }, 'save').name('Pobierz bieżące jako JSON');
+const fG = gui.addFolder('Bryła i fraktal');
+fG.add(params, 'solid', SOLIDS.map(s => s.name)).name('Bryła').onChange(switchSolid);
+fG.add(params, 'fractal', FRACTAL_NAMES).name('Fraktal').onChange(() => { updateStaticHud(); restartGrowth(); });
+fG.add(params, 'anchor', ['Narożniki', 'Środek']).name('Start fraktala').onChange(() => { updateStaticHud(); restartGrowth(); });
+fG.add(params, 'growSeconds', 0.5, 20, 0.5).name('Czas wzrostu [s]');
+fG.add(params, 'growLoop').name('Wzrost w pętli (1/3 okresu)');
+fG.add({ regrow: () => restartGrowth() }, 'regrow').name('Restart wzrostu (G)');
+fG.add(params, 'autoCycle').name('Auto-przełączanie');
+fG.add(params, 'cycleSeconds', 3, 27, 3).name('Co ile sekund');
+fG.add(params, 'zoom', 0.3, 4, 0.01).name('Zoom fraktala');
+fG.add(params, 'iterMult', 1, 9, 1).name('Iteracje = k × N (bez rez.)');
+const aG = gui.addFolder('Animacja');
+aG.add(params, 'paused').name('Pauza (Spacja)');
+aG.add(params, 'speed', 0, 3, 0.01).name('Prędkość czasu');
+aG.add(params, 'rotSpeed', 0, 2, 0.01).name('Prędkość rotacji');
+const rG = gui.addFolder('Rezonans 3-6-9');
+rG.add(params, 'resMode', ['Wyłączony', 'Płynny', 'Skokowy']).name('Tryb (R)').onChange(updateStaticHud);
+rG.add(params, 'baseHz', 0.03, 0.5, 0.001).name('Częstotliwość bazowa f');
+rG.add(params, 'resAmt', 0, 1, 0.01).name('Siła rezonansu');
+const sG = gui.addFolder('Dźwięk – częstotliwości');
+sG.add(params, 'soundOn').name('Włącz dźwięk (M)').onChange(setSound);
+sG.add(params, 'sound', SOUND_NAMES).name('Preset').onChange(name => {
+  const s = soundByName(name);
+  params.carrierHz = s.hz;
+  params.beatHz = s.beat;
+  refreshGui();
+  updateSoundHud();
+});
+sG.add(params, 'carrierHz', 0, 1000, 0.01).name('Nośna f [Hz] (0 = cisza)').onChange(updateSoundHud);
+sG.add(params, 'beatHz', 0, 40, 0.01).name('Dudnienie Δ [Hz] (słuchawki)').onChange(updateSoundHud);
+sG.add(params, 'volume', 0, 1, 0.01).name('Głośność');
+sG.add(params, 'soundCouple').name('Pulsuj z rezonansem');
+sG.add(params, 'visMode', VIS_MODES).name('Wizualizacja (V)');
+sG.add(params, 'visSize', VIS_SIZES).name('Rozmiar wizualizacji (B)');
+const srcCtrl = sG.add(params, 'inputSource', INPUTS).name('Źródło wizualizacji').onChange(() => startInput());
+let devCtrl = sG.add(params, 'audioInput', { 'Dźwięk systemu (auto)': 'system', 'Domyślne wejście (mikrofon)': '' }).name('Urządzenie wejściowe').onChange(() => startInput());
+sG.add(params, 'audioReact').name('Fraktale reagują na widmo');
+sG.add(params, 'reactAmt', 0, 2, 0.01).name('Siła reakcji');
+const gG = gui.addFolder('Geometria');
+gG.add(params, 'explode', 0, 1, 0.01).name('Rozsunięcie ścian (E)');
+gG.add(params, 'showDual').name('Bryła dualna').onChange(v => { if (current) current.dual.visible = v; });
+gG.add(params, 'showRings').name('Pierścienie 3:6:9').onChange(v => { rings.visible = v; });
+const vG = gui.addFolder('Neon / Bloom');
+vG.add(params, 'brightness', 0.2, 2, 0.01).name('Jasność fraktali');
+vG.add(params, 'edgeGlow', 0.5, 6, 0.1).name('Świecenie krawędzi').onChange(syncColors);
+vG.add(params, 'bloomStrength', 0, 3, 0.01).name('Bloom – siła');
+vG.add(params, 'bloomRadius', 0, 1, 0.01).name('Bloom – promień').onChange(v => { bloom.radius = v; });
+vG.add(params, 'bloomThreshold', 0, 1, 0.01).name('Bloom – próg').onChange(v => { bloom.threshold = v; });
+vG.add(params, 'exposure', 0.3, 2.5, 0.01).name('Ekspozycja').onChange(v => { renderer.toneMappingExposure = v; });
+vG.add(params, 'pixelRatio', 0.5, 2, 0.25).name('Rozdzielczość (wydajność)').onChange(v => {
+  renderer.setPixelRatio(v); composer.setPixelRatio(v); onResize();
+});
+vG.addColor(params, 'c0').name('Kolor 3 (cyjan)').onChange(syncColors);
+vG.addColor(params, 'c1').name('Kolor 6 (magenta)').onChange(syncColors);
+vG.addColor(params, 'c2').name('Kolor 9 (złoto)').onChange(syncColors);
+vG.close();
+const mG = gui.addFolder('Pamięć ustawień');
+mG.add(params, 'keepUser').name('Eksperymenty nie zmieniają światła/dźwięku');
+mG.add({ save: () => saveSettings(true) }, 'save').name('Zapisz teraz');
+mG.add({ reset: resetSettings }, 'reset').name('Przywróć domyślne światło i dźwięk');
+mG.close();
+if (innerWidth < 700) gui.close();
+const refreshGui = () => gui.controllersRecursive().forEach(c => c.updateDisplay());
+
+// ───────────────────────── HUD ─────────────────────────
+const $ = id => document.getElementById(id);
+function updateStaticHud() {
+  if (!current) return;
+  const N = current.N;
+  const mode = FRACTALS[params.fractal];
+  const detail = [
+    `iteracje = k·N (k∈{3,6,9})`,
+    `z → z<sup>${digitalRoot(N)}</sup> + c, iteracje = k·N`,
+    `${current.sides}-flake, głębokość ⌈log₂N⌉+1 = ${Math.ceil(Math.log2(N)) + 1}`,
+    `symetria ${N}-krotna, iteracje ≈ N`,
+  ][mode];
+  $('hudSolid').innerHTML = `<span class="k">${current.def.name}</span> · N = <b>${N}</b> ścian · ${current.sides}-kątne · dr(N) = <span class="g">${digitalRoot(N)}</span>`;
+  const start = params.anchor === 'Narożniki'
+    ? `start z narożników: N·k = ${N}·${current.sides} = <span class="g">${N * current.sides}</span> źródeł`
+    : `start ze środków ścian`;
+  $('hudMath').innerHTML = `${params.fractal}: ${detail}<br>${start}`;
+  const vals = current.faces.map(f => (f.value % 3 === 0 ? `<span class="g">${f.value}</span>` : f.value)).join(' ');
+  $('hudFaces').innerHTML = `ściany dr(N·2ⁱ): ${vals}`;
+  updateSoundHud();
+}
+
+function updateSoundHud() {
+  const hz = params.carrierHz, beat = params.beatHz;
+  const src = audio.ext ? `<br>Wizualizacja słucha: <span class="g">${escapeHtml(audio.label)}</span>` : '';
+  if (!params.soundOn || hz <= 0) { $('hudSound').innerHTML = 'Dźwięk: wyłączony (M)' + src; return; }
+  const s = soundByName(params.sound);
+  const custom = s.hz !== hz || s.beat !== beat;
+  const fmt = v => (+v.toFixed(2)).toString().replace('.', ',');
+  $('hudSound').innerHTML = `Dźwięk: <span class="k">${custom ? 'własny' : s.name}</span> · ${fmt(hz)} Hz`
+    + ` (dr = <span class="g">${digitalRoot(Math.round(hz))}</span>)`
+    + (beat > 0 ? ` · Δ = ${fmt(beat)} Hz` : '')
+    + (!custom && s.opis ? `<br><small>${s.opis}</small>` : '') + src;
+}
+
+function setSound(on) {
+  params.soundOn = on;
+  if (on) {
+    startAudio().catch(e => toast(`Nie można uruchomić dźwięku: ${e.message}`, 'warn'));
+    if (!audio.warned) {
+      audio.warned = true;
+      toast('Dudnienia binauralne (Δ > 0) działają tylko w słuchawkach. Przypisywane tym częstotliwościom działanie '
+        + 'lecznicze w większości nie jest potwierdzone naukowo – traktuj je jako relaks, nie terapię.', 'info', 9000);
+    }
+  }
+  updateSoundHud();
+}
+
+// ───────────────────────── Wizualizacja audio (w stylu Winampa / AVS / MilkDrop) ─────────────────────────
+const BARS = 48, F_MIN = 40;   // pasma widma w skali logarytmicznej: do 2 kHz dla generatora, do 16 kHz dla muzyki
+const fMax = () => (audio.ext ? 16000 : 2000);
+// Analiza działa, gdy jest czego słuchać: zewnętrzne wejście albo włączony generator (niezależnie od siebie)
+const audioLive = () => !!audio.ctx && (!!audio.ext || (params.soundOn && params.carrierHz > 0));
+const vis = {
+  cv: $('vis'), fb: document.createElement('canvas'), spec: document.createElement('canvas'),
+  peaks: new Float32Array(BARS), bars: new Float32Array(BARS), barsL: new Float32Array(BARS), barsR: new Float32Array(BARS),
+  level: 0, slow: 0, onset: 0, agc: 0.05, rmsL: 0, rmsR: 0, vuPeak: [0, 0], t: 0,
+};
+vis.g = vis.cv.getContext('2d');
+// Widmo jako tekstura 48×1 dla shadera fraktali
+vis.texData = new Uint8Array(BARS);
+vis.tex = new THREE.DataTexture(vis.texData, BARS, 1, THREE.RedFormat, THREE.UnsignedByteType);
+vis.tex.magFilter = vis.tex.minFilter = THREE.LinearFilter;
+vis.tex.needsUpdate = true;
+uniforms.uSpec.value = vis.tex;
+function cycleVis() {
+  params.visMode = VIS_MODES[(VIS_MODES.indexOf(params.visMode) + 1) % VIS_MODES.length];
+  refreshGui();
+  scheduleSave();
+}
+function cycleVisSize() {
+  params.visSize = VIS_SIZES[(VIS_SIZES.indexOf(params.visSize) + 1) % VIS_SIZES.length];
+  refreshGui();
+  scheduleSave();
+}
+vis.cv.addEventListener('click', cycleVis);
+
+// Przeglądarka może wstrzymać AudioContext (brak gestu, uśpiona karta) – każdy klik / klawisz go wznawia
+const wakeAudio = () => { if (audio.ctx?.state === 'suspended') audio.ctx.resume(); };
+addEventListener('pointerdown', wakeAudio);
+addEventListener('keydown', wakeAudio);
+
+// Co klatkę: pasma widma (L, P i max), poziomy RMS i wykrywanie uderzeń. Generator: poziom względem
+// nominalnej głośności; muzyka: automatyczne wzmocnienie (AGC) i uderzenia z pasma basu (40–160 Hz).
+function analyzeAudio(dt) {
+  vis.t += dt;
+  if (!audioLive() || audio.ctx.state !== 'running') {
+    for (const a of [vis.bars, vis.barsL, vis.barsR]) a.forEach((v, b) => { a[b] = Math.max(0, v - dt * 2); });
+    vis.level = Math.max(0, vis.level - dt * 2);
+    vis.rmsL = vis.rmsR = vis.onset = 0;
+  } else {
+    const { anL, anR } = audio;
+    if (!vis.fL || vis.fL.length !== anL.frequencyBinCount) {
+      vis.fL = new Uint8Array(anL.frequencyBinCount); vis.fR = new Uint8Array(anL.frequencyBinCount);
+      vis.tL = new Float32Array(anL.fftSize); vis.tR = new Float32Array(anL.fftSize);
+    }
+    anL.getByteFrequencyData(vis.fL);
+    anR.getByteFrequencyData(vis.fR);
+    anL.getFloatTimeDomainData(vis.tL);
+    anR.getFloatTimeDomainData(vis.tR);
+    const n = vis.fL.length, nyq = audio.ctx.sampleRate / 2, fr = fMax() / F_MIN;
+    let bass = 0, nb = 0;
+    for (let b = 0; b < BARS; b++) {
+      const i0 = Math.floor(F_MIN * fr ** (b / BARS) / nyq * n);
+      const i1 = Math.max(i0 + 1, Math.ceil(F_MIN * fr ** ((b + 1) / BARS) / nyq * n));
+      let l = 0, r = 0;
+      for (let i = i0; i < i1; i++) { l = Math.max(l, vis.fL[i]); r = Math.max(r, vis.fR[i]); }
+      vis.barsL[b] = l / 255;
+      vis.barsR[b] = r / 255;
+      vis.bars[b] = Math.max(l, r) / 255;
+      if (F_MIN * fr ** (b / BARS) < 160) { bass += vis.bars[b]; nb++; }
+    }
+    bass /= Math.max(1, nb);
+    let sl = 0, sr = 0;
+    for (let i = 0; i < 2048; i++) { sl += vis.tL[i] * vis.tL[i]; sr += vis.tR[i] * vis.tR[i]; }
+    vis.rmsL = Math.sqrt(sl / 2048);
+    vis.rmsR = Math.sqrt(sr / 2048);
+    const amp = Math.max(vis.rmsL, vis.rmsR) * Math.SQRT2;   // amplituda sinusa
+    vis.agc = Math.max(amp, vis.agc * (1 - dt * 0.15), 0.003);   // wolno opadający szczyt = skala dla muzyki
+    vis.level = Math.min(1.5, amp / (audio.ext ? vis.agc : Math.max(0.005, params.volume * 0.5)));
+    const sig = audio.ext ? bass : vis.level;
+    vis.slow += (sig - vis.slow) * Math.min(1, dt * 2);
+    vis.onset = Math.max(vis.onset - dt * 3, Math.min(1, Math.max(0, sig - vis.slow - 0.04) * 6));
+  }
+  vis.bars.forEach((v, b) => { vis.peaks[b] = Math.max(v, vis.peaks[b] - dt * 0.6); vis.texData[b] = v * 255; });
+  vis.tex.needsUpdate = true;
+  uniforms.uLevel.value = vis.level;
+  uniforms.uOnset.value = vis.onset;
+  uniforms.uReact.value = params.audioReact ? params.reactAmt : 0;
+}
+
+const GREEN = '#1fd51f', YELLOW = '#e8e81a', RED = '#e81a1a';
+const dB = x => 20 * Math.log10(Math.max(x, 1e-6));
+// Skala przebiegu: generator – względem nominalnej głośności (widać pulsowanie), muzyka – według AGC
+const waveScale = () => 0.85 / Math.max(0.01, audio.ext ? vis.agc : params.volume * 0.5);
+// Kolor „ognia” dla spektrogramu: czerń → granat → magenta → złoto → biel
+function heat(v) {
+  const stops = [[0, 0, 0], [20, 10, 90], [200, 30, 170], [255, 190, 40], [255, 255, 255]];
+  const x = Math.min(0.999, Math.max(0, v)) * (stops.length - 1), i = Math.floor(x), f = x - i;
+  return stops[i].map((c, k) => Math.round(c + (stops[i + 1][k] - c) * f));
+}
+function ledGradient(g, x0, y0, x1, y1) {
+  const grad = g.createLinearGradient(x0, y0, x1, y1);
+  grad.addColorStop(0, GREEN); grad.addColorStop(0.55, YELLOW); grad.addColorStop(1, RED);
+  return grad;
+}
+function ledLines(g, W, H, dpr, horizontal = true) {
+  g.fillStyle = 'rgba(0, 0, 0, .6)';
+  if (horizontal) for (let y = H; y > 0; y -= 3 * dpr) g.fillRect(0, y, W, dpr);
+  else for (let x = 0; x < W; x += 4 * dpr) g.fillRect(x, 0, dpr, H);
+}
+// Wyzwalanie na narastającym zboczu – stabilny obraz oscyloskopu
+function trigger(buf, win) {
+  for (let i = 1; i < buf.length - win; i++) if (buf[i - 1] < 0 && buf[i] >= 0) return i;
+  return 0;
+}
+
+const VIS_DRAW = {
+  'Widmo'(g, W, H, dpr) {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const bw = W / BARS, grad = ledGradient(g, 0, H, 0, 0);
+    for (let b = 0; b < BARS; b++) {
+      const v = vis.bars[b], x = b * bw + dpr, w = bw - 2 * dpr;
+      g.fillStyle = grad;
+      g.fillRect(x, H - v * H, w, v * H);
+      g.fillStyle = '#c8c8c8';
+      g.fillRect(x, H - vis.peaks[b] * H - 2 * dpr, w, 2 * dpr);   // opadające „czapki” szczytów
+    }
+    ledLines(g, W, H, dpr);
+  },
+  // Lewy kanał w górę, prawy w dół – od środkowej linii
+  'Widmo lustrzane L/P'(g, W, H, dpr) {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const bw = W / BARS, h2 = H / 2;
+    const up = ledGradient(g, 0, h2, 0, 0), down = ledGradient(g, 0, h2, 0, H);
+    for (let b = 0; b < BARS; b++) {
+      const x = b * bw + dpr, w = bw - 2 * dpr;
+      g.fillStyle = up; g.fillRect(x, h2 - vis.barsL[b] * h2, w, vis.barsL[b] * h2);
+      g.fillStyle = down; g.fillRect(x, h2, w, vis.barsR[b] * h2);
+    }
+    ledLines(g, W, H, dpr);
+  },
+  // Gładka obwiednia widma z wypełnieniem (styl „line” z Winampa)
+  'Widmo – linia'(g, W, H, dpr) {
+    g.fillStyle = 'rgba(0, 0, 0, .35)'; g.fillRect(0, 0, W, H);
+    const pts = [...vis.bars].map((v, b) => [(b + 0.5) / BARS * W, H - v * H * 0.95]);
+    g.beginPath();
+    g.moveTo(0, H);
+    pts.forEach(([x, y], i) => {
+      const [px, py] = pts[i - 1] ?? [0, H];
+      g.quadraticCurveTo(px, py, (px + x) / 2, (py + y) / 2);
+    });
+    g.lineTo(W, H);
+    const fill = g.createLinearGradient(0, H, 0, 0);
+    fill.addColorStop(0, 'rgba(31, 213, 31, .05)'); fill.addColorStop(1, 'rgba(232, 232, 26, .45)');
+    g.fillStyle = fill; g.fill();
+    g.strokeStyle = YELLOW; g.lineWidth = 1.5 * dpr; g.stroke();
+    g.fillStyle = '#c8c8c8';
+    vis.peaks.forEach((p, b) => g.fillRect((b + 0.5) / BARS * W - dpr, H - p * H * 0.95 - dpr, 2 * dpr, 2 * dpr));
+  },
+  // Wodospad: czas płynie w lewo, wysokość = częstotliwość (log), kolor = poziom
+  'Spektrogram'(g, W, H, dpr) {
+    const sc = vis.spec, sg = sc.getContext('2d');
+    if (sc.width !== W || sc.height !== H) { sc.width = W; sc.height = H; sg.fillStyle = '#000'; sg.fillRect(0, 0, W, H); }
+    const step = Math.max(1, Math.round(2 * dpr));
+    sg.drawImage(sc, -step, 0);
+    if (vis.fL) {
+      const n = vis.fL.length, nyq = audio.ctx.sampleRate / 2, fr = fMax() / F_MIN;
+      const col = sg.createImageData(step, H);
+      for (let y = 0; y < H; y++) {
+        const i = Math.min(n - 1, Math.round(F_MIN * fr ** (1 - y / H) / nyq * n));
+        const [r, gg, b] = heat(Math.max(vis.fL[i], vis.fR[i]) / 255);
+        for (let x = 0; x < step; x++) col.data.set([r, gg, b, 255], (y * step + x) * 4);
+      }
+      sg.putImageData(col, W - step, 0);
+    }
+    g.drawImage(sc, 0, 0);
+  },
+  'Oscyloskop'(g, W, H, dpr) {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const win = Math.round(audio.ctx.sampleRate * 0.02), s0 = trigger(vis.tL, win), sc = waveScale();   // okno 20 ms
+    g.lineWidth = 1.5 * dpr;
+    [[vis.tR, 'rgba(31, 213, 31, .7)'], [vis.tL, YELLOW]].forEach(([buf, col]) => {
+      g.strokeStyle = col;
+      g.beginPath();
+      for (let i = 0; i < win; i++) g.lineTo(i / (win - 1) * W, H / 2 - buf[s0 + i] * sc * H / 2);
+      g.stroke();
+    });
+  },
+  // Klasyczne „kropki” Winampa: kolor punktu zależy od wychylenia
+  'Oscyloskop – kropki'(g, W, H, dpr) {
+    g.fillStyle = 'rgba(0, 0, 0, .5)'; g.fillRect(0, 0, W, H);
+    const cols = Math.floor(W / (2 * dpr)), win = Math.round(audio.ctx.sampleRate * 0.01);
+    const s0 = trigger(vis.tL, win), sc = waveScale(), sz = 2 * dpr;
+    for (let c = 0; c < cols; c++) {
+      const v = Math.max(-1, Math.min(1, (vis.tL[s0 + Math.floor(c / cols * win)] + vis.tR[s0 + Math.floor(c / cols * win)]) / 2 * sc));
+      const a = Math.abs(v);
+      g.fillStyle = a > 0.8 ? RED : a > 0.45 ? YELLOW : GREEN;
+      g.fillRect(c * 2 * dpr, H / 2 - v * H / 2 - sz / 2, sz, sz);
+    }
+  },
+  // Lissajous: x = lewy kanał, y = prawy. Dudnienie binauralne obraca elipsę z częstotliwością Δ.
+  'Lissajous L/R'(g, W, H, dpr) {
+    g.fillStyle = 'rgba(0, 0, 0, .3)'; g.fillRect(0, 0, W, H);   // poświata luminoforu
+    const R = H / 2 * 0.9, cx = W / 2, cy = H / 2, sc = waveScale();
+    // Generator: dwa okresy nośnej – dłuższe okno nakłada elipsy o różnych fazach i zamazuje obrót
+    const len = audio.ext ? 1024 : Math.min(2048, Math.ceil(2 * audio.ctx.sampleRate / Math.max(params.carrierHz, 20)));
+    g.strokeStyle = GREEN; g.lineWidth = 1.5 * dpr;
+    g.beginPath();
+    for (let i = 0; i < len; i++) g.lineTo(cx + vis.tL[i] * sc * R, cy - vis.tR[i] * sc * R);
+    g.stroke();
+  },
+  // Dwa wskaźniki wysterowania L/P w dBFS z przytrzymaniem szczytu
+  'VU-metry L/P'(g, W, H, dpr) {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const x0 = 22 * dpr, w = W - x0 - 60 * dpr, bh = H * 0.22, grad = ledGradient(g, x0, 0, x0 + w, 0);
+    g.font = `${11 * dpr}px ui-monospace, monospace`;
+    [vis.rmsL, vis.rmsR].forEach((rms, ch) => {
+      const d = dB(rms), v = Math.min(1, Math.max(0, (d + 60) / 60));   // −60…0 dBFS
+      vis.vuPeak[ch] = Math.max(v, vis.vuPeak[ch] - 0.006);
+      const y = H * (ch ? 0.62 : 0.28) - bh / 2;
+      g.fillStyle = '#101810'; g.fillRect(x0, y, w, bh);
+      g.fillStyle = grad; g.fillRect(x0, y, v * w, bh);
+      g.fillStyle = '#e0e0e0'; g.fillRect(x0 + vis.vuPeak[ch] * w - dpr, y, 2 * dpr, bh);
+      g.fillStyle = GREEN;
+      g.fillText(ch ? 'P' : 'L', 6 * dpr, y + bh * 0.75);
+      g.fillText(`${Math.max(-60, d).toFixed(1)} dB`, x0 + w + 6 * dpr, y + bh * 0.75);
+    });
+    ledLines(g, W, H, dpr, false);
+    g.fillStyle = 'rgba(31, 213, 31, .6)';
+    for (let d = -60; d <= 0; d += 10) g.fillText(`${d}`, x0 + (d + 60) / 60 * w - 8 * dpr, H - 4 * dpr);
+  },
+  // AVS: promieniste widmo + przebieg zawinięty w okrąg, z poświatą i obrotem
+  'Okrąg (AVS)'(g, W, H, dpr) {
+    g.fillStyle = 'rgba(0, 0, 0, .22)'; g.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2, R0 = Math.min(W, H) * (0.18 + 0.05 * vis.onset), L = Math.min(W, H) * 0.3;
+    const rays = BARS * 2, rot = vis.t * 0.3, hue = vis.t * 40;
+    g.lineWidth = Math.max(1, Math.min(W, H) / 120);
+    for (let k = 0; k < rays; k++) {
+      const v = vis.bars[k < BARS ? k : rays - 1 - k], a = rot + k / rays * Math.PI * 2;
+      g.strokeStyle = `hsl(${hue + k / rays * 360}, 100%, ${45 + 25 * v}%)`;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * R0, cy + Math.sin(a) * R0);
+      g.lineTo(cx + Math.cos(a) * (R0 + v * L), cy + Math.sin(a) * (R0 + v * L));
+      g.stroke();
+    }
+    const sc = waveScale(), N = 512;
+    g.strokeStyle = `hsl(${hue + 180}, 100%, 70%)`;
+    g.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const a = -rot + i / N * Math.PI * 2, r = R0 * (0.75 + 0.25 * vis.tL[i % N] * sc);
+      g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    g.stroke();
+  },
+  // MilkDrop: sprzężenie zwrotne obrazu (powiększenie + obrót + wygaszanie) i przebieg malowany w środku
+  'Tunel (MilkDrop)'(g, W, H, dpr) {
+    const fb = vis.fb, fg = fb.getContext('2d');
+    if (fb.width !== W || fb.height !== H) { fb.width = W; fb.height = H; }
+    fg.globalCompositeOperation = 'copy';
+    fg.drawImage(g.canvas, 0, 0);
+    fg.globalCompositeOperation = 'source-over';
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    g.save();
+    g.globalAlpha = 0.92;
+    g.translate(W / 2, H / 2);
+    g.rotate(0.012 + 0.06 * vis.onset);
+    g.scale(1.035 + 0.05 * vis.level, 1.035 + 0.05 * vis.level);
+    g.translate(-W / 2, -H / 2);
+    g.drawImage(fb, 0, 0);
+    g.restore();
+    const sc = waveScale(), N = 384, hue = vis.t * 60;
+    g.lineWidth = Math.max(1.5, Math.min(W, H) / 100);
+    g.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+    g.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = W * 0.2 + i / (N - 1) * W * 0.6, y = H / 2 + vis.tL[i * 2] * sc * H * 0.18;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+    if (vis.onset > 0.3) {   // błysk na uderzeniu basu
+      g.fillStyle = `hsla(${hue + 120}, 100%, 60%, ${vis.onset * 0.15})`;
+      g.fillRect(0, 0, W, H);
+    }
+  },
+};
+
+function drawVis() {
+  const show = (audioLive() || params.inputSource !== INPUTS[0]) && params.visMode !== 'Wyłączona';
+  vis.cv.style.display = show ? 'block' : 'none';
+  if (!show) return;
+  const overlay = params.visSize === VIS_SIZES[3];
+  vis.cv.className = `size-${VIS_SIZES.indexOf(params.visSize)}`;
+  const { cv, g } = vis, dpr = Math.min(devicePixelRatio, overlay ? 1 : 2);
+  const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+  if (!W || !H) return;
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  if (!vis.tL || !audioLive()) {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  } else {
+    VIS_DRAW[params.visMode](g, W, H, dpr);
+  }
+  if (overlay) return;
+  g.font = `${10 * dpr}px ui-monospace, monospace`;
+  g.fillStyle = GREEN;
+  const suspended = audio.ctx && audio.ctx.state !== 'running';
+  const hz = params.carrierHz, beat = params.beatHz;
+  g.fillText(`${params.visMode.toUpperCase()} · ` + (suspended ? 'AUDIO WSTRZYMANE – KLIKNIJ' : audio.ext ? audio.label
+    : `${hz.toFixed(2)} Hz${beat > 0 ? ` · Δ ${beat.toFixed(2)} Hz` : ''}`), 6 * dpr, 13 * dpr);
+}
+
+// ───────────────────────── Zewnętrzne źródło dźwięku (YouTube, odtwarzacz, cały system) ─────────────────────────
+// Linux: Chromium (Chrome, Brave, Edge) ukrywa źródła typu „Monitor of …” na liście wejść. Dlatego serwer (main.py)
+// tworzy wirtualne źródło PulseAudio/PipeWire podpięte pod monitor domyślnego wyjścia – zwykłe wejście, które
+// przeglądarka widzi i które słyszy wszystko, co gra w słuchawkach / głośnikach.
+const SYSTEM_INPUT = 'system';
+const LINUX_HINT = ' Uruchom aplikację przez „python main.py” (tworzy wejście „Dźwięk systemu”), albo w pavucontrol → '
+  + 'zakładka „Nagrywanie” przełącz przeglądarkę na „Monitor of …” swoich słuchawek. Można też użyć trybu „Karta lub ekran”.';
+
+const withTimeout = (promise, ms) => Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+
+function stopInput() {
+  clearTimeout(audio.silenceTimer);
+  audio.ext?.disconnect();
+  audio.stream?.getTracks().forEach(t => t.stop());
+  audio.ext = audio.stream = null;
+  audio.label = '';
+}
+
+function routeInput() {
+  if (!audio.ctx) return;
+  audio.genTap.gain.value = audio.ext ? 0 : 1;
+  audio.extTap.gain.value = audio.ext ? 1 : 0;
+}
+
+// Nazwy urządzeń są znane dopiero po zgodzie na mikrofon; enumerateDevices potrafi się zawiesić – stąd limit czasu
+async function listInputDevices() {
+  const devs = (await withTimeout(navigator.mediaDevices.enumerateDevices(), 3000))
+    .filter(d => d.kind === 'audioinput' && d.deviceId);
+  const opts = { 'Dźwięk systemu (auto)': SYSTEM_INPUT, 'Domyślne wejście (mikrofon)': '' };
+  devs.forEach((d, i) => { opts[d.label || `Wejście ${i + 1}`] = d.deviceId; });
+  // lil-gui: options() tworzy nowy kontroler na końcu folderu – wracamy pod „Źródło wizualizacji”
+  devCtrl = devCtrl.options(opts).name('Urządzenie wejściowe').onChange(() => startInput());
+  srcCtrl.domElement.after(devCtrl.domElement);
+  return devs;
+}
+
+// „Dźwięk systemu”: prosi serwer o wirtualne źródło i wyszukuje je wśród wejść przeglądarki.
+// Bez serwera (lub poza Linuksem) – monitor wyjścia, jeśli przeglądarka go pokazuje (Firefox).
+async function findSystemInput(open) {
+  const sys = await fetch('audio/system', { method: 'POST' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  const probe = await open('');                       // zgoda na mikrofon → dostępne nazwy urządzeń
+  const devs = await listInputDevices().catch(() => []);
+  probe.getTracks().forEach(t => t.stop());
+  const monitors = devs.filter(d => /monitor/i.test(d.label));
+  const dev = (sys && devs.find(d => d.label.includes(sys.label))) || (monitors.length === 1 ? monitors[0] : null);
+  if (!dev) {
+    throw new Error(monitors.length > 1
+      ? `jest kilka monitorów wyjścia – wybierz w „Urządzenie wejściowe” ten od swoich słuchawek (${monitors.map(m => m.label).join(', ')})`
+      : 'nie znaleziono wejścia z dźwiękiem systemu');
+  }
+  return open(dev.deviceId);
+}
+
+async function startInput() {
+  stopInput();
+  const mode = params.inputSource;
+  if (mode !== INPUTS[0]) {
+    // Bez efektów rozmów (redukcja echa / szumu / AGC) – psułyby muzykę
+    const clean = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+    try {
+      await startAudio();
+      let stream;
+      if (mode === INPUTS[1]) {
+        const open = id => navigator.mediaDevices.getUserMedia({ audio: { ...clean, ...(id ? { deviceId: { exact: id } } : {}) } });
+        stream = params.audioInput === SYSTEM_INPUT ? await findSystemInput(open) : await open(params.audioInput).catch(() => open(''));
+      } else {
+        if (!navigator.mediaDevices.getDisplayMedia) throw new Error('przeglądarka nie obsługuje przechwytywania ekranu');
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: clean, systemAudio: 'include' });
+        if (!stream.getAudioTracks().length) {
+          stream.getTracks().forEach(t => t.stop());
+          throw new Error('brak dźwięku – w oknie wyboru zaznacz „Udostępnij dźwięk karty/systemu” '
+            + '(Chrome/Edge; Firefox nie przechwytuje dźwięku z ekranu – użyj trybu „Wejście audio / monitor systemu”)');
+        }
+      }
+      const track = stream.getAudioTracks()[0];
+      // Zakończenie udostępniania z poziomu przeglądarki → powrót do generatora
+      stream.getTracks().forEach(t => t.addEventListener('ended', () => {
+        if (audio.stream !== stream) return;
+        params.inputSource = INPUTS[0];
+        stopInput(); routeInput(); refreshGui(); updateSoundHud();
+        toast('Przechwytywanie dźwięku zakończone – wizualizacja wraca do generatora');
+      }));
+      let ext;
+      try {
+        ext = audio.ctx.createMediaStreamSource(stream);
+      } catch (e) {
+        // Firefox: strumień i AudioContext muszą mieć tę samą częstotliwość próbkowania – budujemy kontekst od nowa
+        const rate = track.getSettings().sampleRate;
+        if (!rate || rate === audio.ctx.sampleRate) throw e;
+        const old = audio.ctx;
+        audio.ctx = null;
+        vis.fL = vis.tL = null;
+        await startAudio(rate);
+        old.close();
+        ext = audio.ctx.createMediaStreamSource(stream);
+      }
+      Object.assign(audio, { stream, label: track.label || mode, ext });
+      ext.connect(audio.extTap);
+      vis.agc = 0.05;
+      toast(`Wizualizacja słucha: ${audio.label}`);
+      if (mode === INPUTS[1]) listInputDevices().catch(() => {});
+      // Cisza przez kilka sekund = prawdopodobnie złe urządzenie (np. mikrofon słuchawek zamiast monitora wyjścia)
+      audio.silenceTimer = setTimeout(() => {
+        if (audio.stream === stream && dB(Math.max(vis.rmsL, vis.rmsR)) < -70) {
+          toast(`Wejście „${audio.label}” milczy.` + LINUX_HINT, 'warn', 14000);
+        }
+      }, 5000);
+    } catch (e) {
+      params.inputSource = INPUTS[0];
+      toast(`Nie udało się przechwycić dźwięku: ${e.message}.` + (mode === INPUTS[1] ? LINUX_HINT : ''), 'warn', 14000);
+    }
+  }
+  routeInput();
+  refreshGui();
+  updateSoundHud();
+  scheduleSave();
+}
+
+// ───────────────────────── Klawiatura ─────────────────────────
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const k = e.key.toLowerCase();
+  if (e.code === 'Space') { params.paused = !params.paused; e.preventDefault(); }
+  else if (k >= '1' && k <= '5') { params.solid = SOLIDS[+k - 1].name; switchSolid(params.solid); }
+  else if (k === 'f') { params.fractal = FRACTAL_NAMES[(FRACTAL_NAMES.indexOf(params.fractal) + 1) % 4]; updateStaticHud(); restartGrowth(); }
+  else if (k === 'g') restartGrowth();
+  else if (k === 'n') stepExperiment(1);
+  else if (k === 'm') setSound(!params.soundOn);
+  else if (k === 'v') cycleVis();
+  else if (k === 'b') cycleVisSize();
+  else if (k === 'r') { const m = ['Wyłączony', 'Płynny', 'Skokowy']; params.resMode = m[(m.indexOf(params.resMode) + 1) % 3]; }
+  else if (k === 'e') params.explode = params.explode > 0.01 ? 0 : 0.35;
+  else if (k === 'h') gui.show(gui._hidden);
+  else return;
+  refreshGui();
+  if (k === 'm') scheduleSave();
+});
+
+function onResize() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+}
+addEventListener('resize', onResize);
+
+// ───────────────────────── Pamięć ustawień światła i dźwięku ─────────────────────────
+// Zapis na serwerze (main.py → ustawienia.json) oraz kopia w ciasteczku – działa też, gdy serwera brak.
+const PERSIST_KEYS = ['brightness', 'edgeGlow', 'bloomStrength', 'bloomRadius', 'bloomThreshold', 'exposure', 'c0', 'c1', 'c2',
+  'soundOn', 'sound', 'carrierHz', 'beatHz', 'volume', 'soundCouple', 'visMode', 'audioReact', 'reactAmt', 'keepUser',
+  'inputSource', 'audioInput', 'visSize'];
+// Ustawienia sesji, których eksperyment nigdy nie zmienia
+const SESSION_KEYS = ['pixelRatio', 'paused', 'playlist', 'soundOn', 'visMode', 'audioReact', 'reactAmt', 'keepUser',
+  'inputSource', 'audioInput', 'visSize'];
+const COOKIE = 'fb369_ustawienia';
+
+function applyLook() {
+  syncColors();
+  bloom.radius = params.bloomRadius;
+  bloom.threshold = params.bloomThreshold;
+  renderer.toneMappingExposure = params.exposure;
+  updateSoundHud();
+}
+
+function collectSettings() {
+  return Object.fromEntries(PERSIST_KEYS.map(k => [k, params[k]]));
+}
+
+let saveTimer;
+const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveSettings, 600); };
+async function saveSettings(verbose = false) {
+  const json = JSON.stringify(collectSettings());
+  document.cookie = `${COOKIE}=${encodeURIComponent(json)}; max-age=31536000; path=/; SameSite=Lax`;
+  try {
+    const r = await fetch('ustawienia', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (verbose) toast('Zapisano ustawienia światła i dźwięku (serwer + ciasteczko)');
+  } catch (e) {
+    if (verbose) toast(`Serwer niedostępny (${e.message}) – ustawienia zapisane tylko w ciasteczku`, 'warn');
+  }
+}
+
+async function loadSettings() {
+  try {
+    const r = await fetch('ustawienia', { cache: 'no-store' });
+    if (r.ok) {
+      const data = await r.json();
+      if (data && Object.keys(data).length) return data;
+    }
+  } catch { /* brak serwera (file://) – próbujemy ciasteczka */ }
+  const c = document.cookie.split('; ').find(x => x.startsWith(`${COOKIE}=`));
+  try { return c ? JSON.parse(decodeURIComponent(c.slice(COOKIE.length + 1))) : null; } catch { return null; }
+}
+
+// Przyjmuje tylko znane pola o typie zgodnym z domyślnym (i prawidłowe nazwy presetów / trybów)
+function restoreSettings(saved) {
+  if (!saved || typeof saved !== 'object') return;
+  for (const k of PERSIST_KEYS) {
+    const v = saved[k];
+    if (typeof v !== typeof DEFAULTS[k] || (typeof v === 'number' && !isFinite(v))) continue;
+    if (k === 'sound' && !SOUND_NAMES.includes(v)) continue;
+    if (k === 'visMode' && !VIS_MODES.includes(v)) continue;
+    if (k === 'visSize' && !VIS_SIZES.includes(v)) continue;
+    if (k === 'inputSource' && !INPUTS.includes(v)) continue;
+    if (/^c\d$/.test(k) && !/^#[0-9a-f]{6}$/i.test(v)) continue;
+    params[k] = v;
+  }
+  // Udostępnianie karty/ekranu wymaga okna wyboru – nie otwieramy go sam z siebie po przeładowaniu
+  if (params.inputSource === INPUTS[2]) params.inputSource = INPUTS[0];
+  const input = params.inputSource !== INPUTS[0];
+  // Przeglądarka uruchomi dźwięk dopiero po geście użytkownika
+  if (params.soundOn || input) {
+    audio.warned = true;
+    const resume = () => {
+      removeEventListener('pointerdown', resume); removeEventListener('keydown', resume);
+      if (params.soundOn) setSound(true);
+      if (input) startInput();
+    };
+    addEventListener('pointerdown', resume);
+    addEventListener('keydown', resume);
+    toast('Przywrócono ustawienia. Kliknij w dowolnym miejscu, aby wznowić dźwięk.', 'info', 6000);
+  }
+  applyLook();
+  refreshGui();
+}
+
+function resetSettings() {
+  for (const k of PERSIST_KEYS) params[k] = DEFAULTS[k];
+  stopInput();
+  routeInput();
+  applyLook();
+  refreshGui();
+  saveSettings(true);
+}
+
+// Zapis po każdej zmianie światła/dźwięku w panelu (nie przy wczytywaniu eksperymentu)
+gui.onFinishChange(e => { if (PERSIST_KEYS.includes(e.property)) scheduleSave(); });
+
+// ───────────────────────── Eksperymenty (eksperymenty.json) ─────────────────────────
+// Mapowanie pól JSON (ścieżka z kropkami) → klucz w params. Te same tabele służą do wczytywania i eksportu.
+const NUM_FIELDS = [
+  ['zoom', 'zoom', 0.3, 4], ['iteracjeK', 'iterMult', 1, 9], ['rozsuniecie', 'explode', 0, 1],
+  ['predkosc', 'speed', 0, 3], ['rotacja', 'rotSpeed', 0, 2], ['jasnosc', 'brightness', 0.2, 2],
+  ['swiecenieKrawedzi', 'edgeGlow', 0.5, 6], ['ekspozycja', 'exposure', 0.3, 2.5],
+  ['rezonans.czestotliwosc', 'baseHz', 0.03, 0.5], ['rezonans.sila', 'resAmt', 0, 1],
+  ['wzrost.czas', 'growSeconds', 0.5, 20],
+  ['dzwiek.czestotliwosc', 'carrierHz', 0, 1000], ['dzwiek.dudnienie', 'beatHz', 0, 40], ['dzwiek.glosnosc', 'volume', 0, 1],
+  ['bloom.sila', 'bloomStrength', 0, 3], ['bloom.promien', 'bloomRadius', 0, 1], ['bloom.prog', 'bloomThreshold', 0, 1],
+];
+const BOOL_FIELDS = [['dualna', 'showDual'], ['pierscienie', 'showRings'], ['wzrost.petla', 'growLoop'], ['dzwiek.sprzezenie', 'soundCouple']];
+const ENUM_FIELDS = [
+  ['fraktal', 'fractal', { julia: FRACTAL_NAMES[0], multibrot: FRACTAL_NAMES[1], sierpinski: FRACTAL_NAMES[2], kali: FRACTAL_NAMES[3] }],
+  ['kotwica', 'anchor', { narozniki: 'Narożniki', srodek: 'Środek' }],
+  ['rezonans.tryb', 'resMode', { wylaczony: 'Wyłączony', plynny: 'Płynny', skokowy: 'Skokowy' }],
+  ['dzwiek.preset', 'sound', Object.fromEntries(SOUNDS.map(s => [s.key, s.name]))],
+];
+const KNOWN_KEYS = new Set(['nazwa', 'opis', 'czas', 'bryla', 'kolory',
+  ...[...NUM_FIELDS, ...BOOL_FIELDS, ...ENUM_FIELDS].map(f => f[0].split('.')[0])]);
+const getPath = (o, path) => path.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
+const setPath = (o, path, v) => {
+  const ks = path.split('.');
+  ks.slice(0, -1).reduce((a, k) => (a[k] ??= {}), o)[ks.at(-1)] = v;
+};
+
+let experiments = [], expIndex = 0, expT = 0, growT = 0;
+
+function restartGrowth() { growT = 0; }
+
+let toastTimer;
+function toast(msg, kind = 'info', ms = 4000) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = `show ${kind}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = kind; }, ms);
+}
+
+// Zamienia jedno wejście JSON na pełny zestaw parametrów (brakujące pola = wartości domyślne),
+// zwraca listę ostrzeżeń dla błędnych pól zamiast przerywać cały eksperyment.
+function resolveExperiment(exp) {
+  const warn = [];
+  const p = { ...DEFAULTS };
+  for (const k of SESSION_KEYS) p[k] = params[k];
+  for (const key of Object.keys(exp)) if (!KNOWN_KEYS.has(key)) warn.push(`nieznane pole "${key}"`);
+
+  if (exp.bryla !== undefined) {
+    const s = SOLIDS.find(s => s.N === exp.bryla || s.name.toLowerCase() === String(exp.bryla).toLowerCase());
+    if (s) p.solid = s.name; else warn.push(`bryla: ${exp.bryla} (dozwolone 4, 6, 8, 12, 20)`);
+  }
+  for (const [path, key, map] of ENUM_FIELDS) {
+    const v = getPath(exp, path);
+    if (v === undefined) continue;
+    if (map[v] !== undefined) p[key] = map[v]; else warn.push(`${path}: "${v}" (dozwolone: ${Object.keys(map).join(', ')})`);
+  }
+  // Preset dźwięku ustawia nośną i dudnienie; jawne dzwiek.czestotliwosc / dzwiek.dudnienie nadpisują je poniżej
+  ({ hz: p.carrierHz, beat: p.beatHz } = soundByName(p.sound));
+  for (const [path, key, min, max] of NUM_FIELDS) {
+    const v = getPath(exp, path);
+    if (v === undefined) continue;
+    if (typeof v === 'number' && isFinite(v)) p[key] = Math.min(max, Math.max(min, v));
+    else warn.push(`${path}: oczekiwano liczby z zakresu ${min}–${max}`);
+  }
+  for (const [path, key] of BOOL_FIELDS) {
+    const v = getPath(exp, path);
+    if (v === undefined) continue;
+    if (typeof v === 'boolean') p[key] = v; else warn.push(`${path}: oczekiwano true/false`);
+  }
+  if (exp.kolory !== undefined) {
+    const ok = Array.isArray(exp.kolory) && exp.kolory.length === 3 && exp.kolory.every(c => /^#[0-9a-f]{6}$/i.test(c));
+    if (ok) [p.c0, p.c1, p.c2] = exp.kolory; else warn.push('kolory: oczekiwano 3 kolorów "#rrggbb"');
+  }
+  if (params.keepUser) for (const k of PERSIST_KEYS) p[k] = params[k];
+  return { p, warn };
+}
+
+function applyExperiment(i) {
+  if (!experiments.length) return;
+  expIndex = (i + experiments.length) % experiments.length;
+  const exp = experiments[expIndex];
+  const { p, warn } = resolveExperiment(exp);
+  Object.assign(params, p);
+  params.experiment = exp.nazwa;
+
+  switchSolid(params.solid);
+  applyLook();
+  if (current) current.dual.visible = params.showDual;
+  rings.visible = params.showRings;
+  restartGrowth();
+  expT = 0;
+  updateStaticHud();
+  refreshGui();
+
+  $('hudExp').innerHTML = `Eksperyment ${expIndex + 1}/${experiments.length}: ${escapeHtml(exp.nazwa)}`
+    + (exp.opis ? `<br><small>${escapeHtml(exp.opis)}</small>` : '');
+  if (warn.length) {
+    console.warn(`[eksperymenty] "${exp.nazwa}":`, warn);
+    toast(`„${exp.nazwa}”: pominięto błędne pola – ${warn.join('; ')}`, 'warn', 7000);
+  }
+}
+const escapeHtml = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const stepExperiment = d => applyExperiment(expIndex + d);
+// lil-gui: options() tworzy nowy kontroler na końcu folderu – przenosimy go z powrotem na górę
+function replaceOptions(names) {
+  const c = expCtrl.options(names).name('Eksperyment');
+  eG.$children.prepend(c.domElement);
+  return c;
+}
+
+// Akceptuje { "eksperymenty": [...] } albo samą tablicę.
+function setExperiments(data, source) {
+  const list = Array.isArray(data) ? data : data?.eksperymenty;
+  if (!Array.isArray(list) || !list.length) throw new Error('brak niepustej tablicy "eksperymenty"');
+  const bad = list.findIndex(e => typeof e !== 'object' || e === null || Array.isArray(e));
+  if (bad >= 0) throw new Error(`element ${bad + 1} nie jest obiektem`);
+  // Unikalne nazwy – lil-gui wybiera eksperyment po nazwie
+  const seen = new Map();
+  experiments = list.map((e, i) => {
+    let name = typeof e.nazwa === 'string' && e.nazwa.trim() ? e.nazwa.trim() : `Eksperyment ${i + 1}`;
+    if (seen.has(name)) name = `${name} (${i + 1})`;
+    seen.set(name, true);
+    return { ...e, nazwa: name };
+  });
+  const names = experiments.map(e => e.nazwa);
+  expCtrl = replaceOptions(names).onChange(name => applyExperiment(names.indexOf(name)));
+  applyExperiment(0);
+  if (source) toast(`Wczytano ${experiments.length} eksperymentów z ${source}`);
+}
+
+function loadJsonText(text, source) {
+  try {
+    setExperiments(JSON.parse(text), source);
+  } catch (e) {
+    toast(`Błąd w ${source}: ${e.message}`, 'warn', 9000);
+    console.error(e);
+  }
+}
+
+async function loadExperimentsFile() {
+  try {
+    const r = await fetch('eksperymenty.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    loadJsonText(await r.text(), 'eksperymenty.json');
+  } catch (e) {
+    // Przeglądarki blokują fetch() przy otwieraniu strony jako file:// – wtedy zostaje wczytanie ręczne.
+    if (!experiments.length) {
+      experiments = [{ nazwa: 'Domyślny' }];
+      expCtrl = replaceOptions(['Domyślny']);
+      params.experiment = 'Domyślny';
+      refreshGui();
+    }
+    toast(`Nie można pobrać eksperymenty.json (${e.message}). Uruchom w katalogu: python3 -m http.server `
+      + `i otwórz http://localhost:8000 – albo wczytaj plik przyciskiem / przeciągnij go na okno.`, 'warn', 12000);
+  }
+}
+
+$('fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (file) loadJsonText(await file.text(), file.name);
+  e.target.value = '';
+});
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', async e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) loadJsonText(await file.text(), file.name);
+});
+
+// Eksport bieżących ustawień w formacie eksperymenty.json (do wklejenia jako nowy eksperyment)
+function downloadCurrent() {
+  const exp = { nazwa: 'Mój eksperyment', opis: '', czas: 27, bryla: current.N };
+  for (const [path, key, map] of ENUM_FIELDS) setPath(exp, path, Object.keys(map).find(k => map[k] === params[key]));
+  for (const [path, key] of NUM_FIELDS) setPath(exp, path, +params[key].toFixed(3));
+  for (const [path, key] of BOOL_FIELDS) setPath(exp, path, params[key]);
+  exp.kolory = [params.c0, params.c1, params.c2];
+  const blob = new Blob([JSON.stringify({ eksperymenty: [exp] }, null, 2)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'moj-eksperyment.json' });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ───────────────────────── Pętla animacji ─────────────────────────
+syncColors();
+buildSolid(SOLIDS.find(s => s.name === params.solid));
+(async () => {
+  const saved = await loadSettings();
+  await loadExperimentsFile();
+  restoreSettings(saved);
+})();
+
+let last = performance.now(), simT = 0, fracT = 0, cycle = 0, autoT = 0;
+let fpsFrames = 0, fpsT = 0, hudT = 0;
+let explodeNow = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const run = !params.paused;
+  if (run) simT += dt * params.speed;
+
+  // Rezonans 3-6-9 → mnożnik R ∈ [3, 9], impuls, przesunięcie palety
+  const f = params.baseHz;
+  const H = harmonic369(simT, f);
+  let R = 6, pulse = 0, palShift = simT * 0.02;
+  if (params.resMode === 'Płynny') {
+    R = 6 + 3 * H;
+    pulse = H;
+    palShift = simT * f + 0.15 * H;
+  } else if (params.resMode === 'Skokowy') {
+    const ph = simT * f * 9;             // 9 uderzeń na okres bazowy
+    const beat = Math.floor(ph);
+    const idx = ((beat % 3) + 3) % 3;
+    R = [3, 6, 9][idx];
+    pulse = Math.exp(-(ph - beat) * 5);
+    palShift = idx / 3;                  // kolory przeskakują cyjan → magenta → złoto
+  }
+  const kR = R / 6;
+
+  if (run) {
+    fracT += dt * params.speed * kR;
+    growT += dt * params.speed;
+    if (params.playlist && experiments.length > 1) {
+      expT += dt;
+      const dur = experiments[expIndex].czas;
+      if (expT > (typeof dur === 'number' && dur > 0 ? dur : 27)) stepExperiment(1);
+    }
+    cycle += dt * params.speed * f * 3 * kR;
+    const w = params.rotSpeed * kR * dt * params.speed;
+    world.rotation.x += w * 3 / 9 * 0.5;
+    world.rotation.y += w * 6 / 9;
+    world.rotation.z += w * 9 / 9 * 0.25;
+    rings.children.forEach(r => { r.rotation.z += dt * params.speed * 0.05 * r.userData.speed * kR; });
+    if (params.autoCycle && transition.phase === 'idle') {
+      autoT += dt;
+      if (autoT > params.cycleSeconds) {
+        autoT = 0;
+        const i = (SOLIDS.findIndex(s => s.name === params.solid) + 1) % SOLIDS.length;
+        params.solid = SOLIDS[i].name;
+        switchSolid(params.solid);
+        refreshGui();
+      }
+    }
+  }
+
+  // Przejście między bryłami
+  let tScale = 1;
+  if (transition.phase !== 'idle') {
+    transition.t += dt / 0.35;
+    if (transition.phase === 'out') {
+      tScale = 1 - ease(Math.min(transition.t, 1));
+      if (transition.t >= 1) { buildSolid(transition.target); transition.phase = 'in'; transition.t = 0; }
+    } else {
+      tScale = ease(Math.min(transition.t, 1));
+      if (transition.t >= 1) transition.phase = 'idle';
+    }
+    solidGroup.rotation.y += dt * 6 * (1 - tScale);
+  }
+  const amt = params.resMode === 'Wyłączony' ? 0 : params.resAmt;
+  solidGroup.scale.setScalar(1.35 * Math.max(tScale, 0.001) * (1 + 0.035 * pulse * amt));
+
+  explodeNow += (params.explode - explodeNow) * Math.min(1, dt * 6);
+  const N = current.N;
+  uniforms.uTime.value = fracT;
+  uniforms.uMode.value = FRACTALS[params.fractal];
+  uniforms.uIter.value = Math.min(200, Math.max(4, Math.round(N * (params.resMode === 'Wyłączony' ? params.iterMult : R))));
+  uniforms.uKaliIt.value = Math.max(3, Math.min(32, Math.round(uniforms.uIter.value / 9)));
+  uniforms.uDepth.value = Math.max(2, Math.min(8, Math.ceil(Math.log2(N)) + 1 + Math.round(R / 3) - 2));
+  uniforms.uPal.value = palShift;
+  uniforms.uPulse.value = pulse;
+  uniforms.uAmt.value = amt;
+  uniforms.uZoom.value = params.zoom;
+  uniforms.uCycle.value = cycle;
+  uniforms.uBright.value = params.brightness;
+  uniforms.uExplode.value = explodeNow;
+  uniforms.uAnchor.value = params.anchor === 'Narożniki' ? 1 : 0;
+  // Wzrost: jednorazowo w growSeconds, albo w pętli – rośnie przez 1/3 okresu (3·growSeconds), trwa przez 2/3
+  const gs = params.growSeconds;
+  uniforms.uGrow.value = params.growLoop ? Math.min(1, ((growT / (3 * gs)) % 1) * 3) : Math.min(1, growT / gs);
+  bloom.strength = params.bloomStrength * (1 + 0.4 * pulse * amt);
+  updateAudio(pulse, amt);
+  analyzeAudio(dt);
+
+  controls.update();
+  composer.render();
+  drawVis();
+
+  // HUD
+  fpsFrames++; fpsT += dt; hudT += dt;
+  if (hudT > 0.15) {
+    hudT = 0;
+    $('vortex').textContent = Math.round(R);
+    $('hudRes').innerHTML = `· ${params.resMode} · iteracje: ${uniforms.uIter.value} · H(t) = ${H.toFixed(2)}`
+      + (!audio.ctx ? '' : audio.ctx.state !== 'running'
+        ? ` · <span class="k">audio wstrzymane (${audio.ctx.state}) – kliknij w stronę</span>`
+        : audio.ext ? ` · wejście ${Math.max(-90, dB(Math.max(vis.rmsL, vis.rmsR))).toFixed(0)} dBFS` : '');
+  }
+  if (fpsT >= 1) {
+    $('hudFps').textContent = `${Math.round(fpsFrames / fpsT)} FPS${params.paused ? ' · PAUZA' : ''}`;
+    fpsFrames = 0; fpsT = 0;
+  }
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

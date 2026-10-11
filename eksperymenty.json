@@ -1,0 +1,294 @@
+{
+  "_instrukcja": [
+    "Każdy eksperyment to obiekt w tablicy 'eksperymenty'. Wszystkie pola poza 'nazwa' są opcjonalne – brakujące przyjmują wartości domyślne.",
+    "bryla: 4 | 6 | 8 | 12 | 20 (liczba ścian)",
+    "fraktal: julia | multibrot | sierpinski | kali",
+    "kotwica: narozniki (fraktal startuje w każdym narożniku każdej ściany) | srodek",
+    "wzrost: { czas: sekundy rozlewania się fraktala 0.5–20, petla: true = odrasta co 3·czas }",
+    "rezonans: { tryb: wylaczony | plynny | skokowy, czestotliwosc: 0.03–0.5 Hz, sila: 0–1 }",
+    "czas: ile sekund trwa eksperyment w trybie 'Odtwarzaj po kolei' (domyślnie 27)",
+    "Pozostałe: zoom 0.3–4, iteracjeK 1–9 (iteracje = k·N przy wyłączonym rezonansie), rozsuniecie 0–1, predkosc 0–3, rotacja 0–2,",
+    "jasnosc 0.2–2, swiecenieKrawedzi 0.5–6, ekspozycja 0.3–2.5, dualna, pierscienie (true/false),",
+    "bloom: { sila 0–3, promien 0–1, prog 0–1 }, kolory: [\"#rrggbb\" dla 3, 6, 9]",
+    "dzwiek: { preset: cisza | 174 | 285 | 396 | 417 | 528 | 639 | 741 | 852 | 963 | 432 | om | 111 | schumann | delta | theta | alfa | beta | gamma, czestotliwosc: nośna 0–1000 Hz, dudnienie: binauralne 0–40 Hz (słuchawki), glosnosc 0–1, sprzezenie: true = głośność pulsuje z rezonansem }. Dźwięk włącza się klawiszem M lub w panelu (przeglądarka wymaga kliknięcia). V lub klik w okno wizualizacji zmienia tryb: widmo, oscyloskop, Lissajous L/R."
+  ],
+  "eksperymenty": [
+    {
+      "nazwa": "1 · Narodziny w narożnikach",
+      "opis": "Sześcian (N=6, oś 3-6): zbiory Julii wyrastają z 24 narożników ścian i spotykają się na symetralnych krawędzi.",
+      "czas": 27,
+      "bryla": 6,
+      "fraktal": "julia",
+      "kotwica": "narozniki",
+      "wzrost": {
+        "czas": 4,
+        "petla": false
+      },
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.111,
+        "sila": 0.8
+      },
+      "dzwiek": {
+        "preset": "174"
+      }
+    },
+    {
+      "nazwa": "2 · Sierpiński z wierzchołków czworościanu",
+      "opis": "N=4 → głębokość ⌈log₂4⌉+1 = 3. Nieskończony zoom wychodzi z każdego z 12 narożników.",
+      "czas": 27,
+      "bryla": 4,
+      "fraktal": "sierpinski",
+      "kotwica": "narozniki",
+      "wzrost": {
+        "czas": 3,
+        "petla": true
+      },
+      "rezonans": {
+        "tryb": "skokowy",
+        "czestotliwosc": 0.111,
+        "sila": 0.9
+      },
+      "kolory": [
+        "#21f4ff",
+        "#ff2bd6",
+        "#ffc236"
+      ],
+      "dzwiek": {
+        "preset": "285"
+      }
+    },
+    {
+      "nazwa": "3 · Ośmiościan – obwód podwajania",
+      "opis": "N=8: wartości ścian 8-7-5-1-2-4-8-7, fala energii płynie w kolejności 1→2→4→8→7→5.",
+      "czas": 27,
+      "bryla": 8,
+      "fraktal": "julia",
+      "kotwica": "narozniki",
+      "rozsuniecie": 0.25,
+      "zoom": 1.3,
+      "wzrost": {
+        "czas": 6
+      },
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.15,
+        "sila": 1
+      },
+      "dzwiek": {
+        "preset": "396"
+      }
+    },
+    {
+      "nazwa": "4 · Dwunastościan z³ (dr 12 = 3)",
+      "opis": "Multibrot trzeciego stopnia startuje z 60 narożników pięciokątów; rezonans skokowy 3→6→9.",
+      "czas": 27,
+      "bryla": 12,
+      "fraktal": "multibrot",
+      "kotwica": "narozniki",
+      "wzrost": {
+        "czas": 3,
+        "petla": true
+      },
+      "rezonans": {
+        "tryb": "skokowy",
+        "czestotliwosc": 0.111,
+        "sila": 0.8
+      },
+      "dzwiek": {
+        "preset": "417"
+      }
+    },
+    {
+      "nazwa": "5 · Antena Mandelbrota (dr 20 = 2)",
+      "opis": "Dwudziestościan: z² + c, igła zbioru Mandelbrota wychodzi dokładnie z każdego narożnika trójkąta.",
+      "czas": 27,
+      "bryla": 20,
+      "fraktal": "multibrot",
+      "kotwica": "narozniki",
+      "zoom": 0.9,
+      "wzrost": {
+        "czas": 5
+      },
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.08,
+        "sila": 0.6
+      },
+      "kolory": [
+        "#3fffd2",
+        "#a64bff",
+        "#ffd56b"
+      ],
+      "dzwiek": {
+        "preset": "528"
+      }
+    },
+    {
+      "nazwa": "6 · Pentaflake – złota proporcja",
+      "opis": "Dwunastościan: pięciokątne płatki skalowane o 1/(1+φ) ≈ 0,382, zoom z każdego wierzchołka.",
+      "czas": 27,
+      "bryla": 12,
+      "fraktal": "sierpinski",
+      "kotwica": "narozniki",
+      "rozsuniecie": 0.15,
+      "wzrost": {
+        "czas": 3,
+        "petla": true
+      },
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.111,
+        "sila": 0.7
+      },
+      "kolory": [
+        "#ffc236",
+        "#ff2b6a",
+        "#21f4ff"
+      ],
+      "dzwiek": {
+        "preset": "639"
+      }
+    },
+    {
+      "nazwa": "7 · Kalejdoskop Kaliego z narożników",
+      "opis": "Dwudziestościan: 20-krotna symetria rozkwita wokół każdego z 60 narożników.",
+      "czas": 27,
+      "bryla": 20,
+      "fraktal": "kali",
+      "kotwica": "narozniki",
+      "zoom": 1.2,
+      "wzrost": {
+        "czas": 4
+      },
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.111,
+        "sila": 0.8
+      },
+      "bloom": {
+        "sila": 1.1,
+        "promien": 0.6,
+        "prog": 0.2
+      },
+      "dzwiek": {
+        "preset": "741"
+      }
+    },
+    {
+      "nazwa": "8 · Rezonans skokowy 3·6·9",
+      "opis": "Sześcian, wzrost co 3 s w pętli, iteracje skaczą 18 → 36 → 54, kolory przeskakują cyjan → magenta → złoto.",
+      "czas": 27,
+      "bryla": 6,
+      "fraktal": "kali",
+      "kotwica": "narozniki",
+      "wzrost": {
+        "czas": 1,
+        "petla": true
+      },
+      "rezonans": {
+        "tryb": "skokowy",
+        "czestotliwosc": 0.111,
+        "sila": 1
+      },
+      "rotacja": 0.6,
+      "bloom": {
+        "sila": 1.2
+      },
+      "dzwiek": {
+        "preset": "852"
+      }
+    },
+    {
+      "nazwa": "9 · Kontrola: cisza, start ze środka",
+      "opis": "Punkt odniesienia: bez rezonansu, fraktal rośnie ze środka ściany, iteracje = 9·N.",
+      "czas": 27,
+      "bryla": 8,
+      "fraktal": "julia",
+      "kotwica": "srodek",
+      "iteracjeK": 9,
+      "wzrost": {
+        "czas": 3
+      },
+      "rezonans": {
+        "tryb": "wylaczony"
+      },
+      "dualna": false,
+      "dzwiek": {
+        "preset": "cisza"
+      }
+    },
+    {
+      "nazwa": "10 · Puls Ziemi – Schumann 7,83 Hz",
+      "opis": "Dwudziestościan oddycha w rytmie rezonansu Schumanna: nośna 216 Hz (432/2), prawe ucho +7,83 Hz. Słuchawki!",
+      "czas": 27,
+      "bryla": 20,
+      "fraktal": "julia",
+      "kotwica": "srodek",
+      "wzrost": {
+        "czas": 9
+      },
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.111,
+        "sila": 0.6
+      },
+      "dzwiek": {
+        "preset": "schumann",
+        "glosnosc": 0.3
+      },
+      "kolory": [
+        "#3fffd2",
+        "#2b6aff",
+        "#9dff6b"
+      ]
+    },
+    {
+      "nazwa": "11 · Theta 6 Hz – medytacja na 396",
+      "opis": "Ośmiościan w powolnym rozkwicie; dudnienie theta 6 Hz na nośnej 396 Hz (dr = 9).",
+      "czas": 27,
+      "bryla": 8,
+      "fraktal": "kali",
+      "kotwica": "narozniki",
+      "wzrost": {
+        "czas": 6
+      },
+      "predkosc": 0.5,
+      "rotacja": 0.2,
+      "rezonans": {
+        "tryb": "plynny",
+        "czestotliwosc": 0.06,
+        "sila": 0.7
+      },
+      "dzwiek": {
+        "preset": "theta"
+      }
+    },
+    {
+      "nazwa": "12 · 963 Hz – korona",
+      "opis": "Dwunastościan, Sierpiński w złocie; najwyższy ton Solfeggio (dr 963 = 9) w rytmie skokowym 3·6·9.",
+      "czas": 27,
+      "bryla": 12,
+      "fraktal": "sierpinski",
+      "kotwica": "narozniki",
+      "wzrost": {
+        "czas": 3,
+        "petla": true
+      },
+      "rezonans": {
+        "tryb": "skokowy",
+        "czestotliwosc": 0.111,
+        "sila": 0.9
+      },
+      "dzwiek": {
+        "preset": "963",
+        "glosnosc": 0.2
+      },
+      "kolory": [
+        "#ffd56b",
+        "#ffffff",
+        "#a64bff"
+      ]
+    }
+  ]
+}
